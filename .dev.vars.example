@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Lokale secrets voor `npm run dev` (wrangler dev).
+#
+# Gebruik:
+#   1. Kopieer dit bestand naar `.dev.vars` (zonder .example)
+#   2. Vul de echte waarden in
+#
+# LET OP: `.dev.vars` staat in .gitignore en mag NOOIT gecommit worden.
+# Voor productie zet je dezelfde vijf waarden als Worker-secrets:
+#   npx wrangler secret put AZURE_CLIENT_ID        (enz. — zie README stap 4)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Application (client) ID van je Azure App Registration
+# (Azure Portal → App registrations → jouw app → Overview)
+AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000000
+
+# Client secret van je Azure App Registration
+# (Azure Portal → App registrations → jouw app → Certificates & secrets)
+AZURE_CLIENT_SECRET=vul-hier-je-client-secret-in
+
+# Directory (tenant) ID van je Azure-tenant (single-tenant!)
+# (Azure Portal → App registrations → jouw app → Overview)
+AZURE_TENANT_ID=00000000-0000-0000-0000-000000000000
+
+# Willekeurige sleutel voor het ondertekenen van goedkeurings-cookies.
+# Genereer met:  openssl rand -hex 32
+COOKIE_ENCRYPTION_KEY=vul-hier-64-hex-tekens-in
+
+# Neon Postgres connection string (met -pooler in de hostnaam aanbevolen)
+# (Neon Console → jouw project → Connection Details)
+DATABASE_URL=postgresql://gebruiker:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require

@@ -1,0 +1,13 @@
+# Afhankelijkheden
+node_modules/
+
+# Wrangler (lokale cache en gegenereerde bestanden)
+.wrangler/
+dist/
+
+# Lokale secrets — NOOIT committen!
+.dev.vars
+
+# Diversen
+.DS_Store
+*.log

@@ -1,0 +1,61 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Cloudflare Workers-configuratie voor de MCP-server.
+//
+// Wat je hier MOET aanpassen bij het opzetten van een nieuw project:
+//   1. "name"              → kies een unieke naam voor jouw Worker
+//   2. kv_namespaces "id"  → vul het ID in van jouw OAUTH_KV-namespace
+//                            (aanmaken met: npx wrangler kv namespace create OAUTH_KV)
+// Zie de README, sectie "Stap 4 — Cloudflare instellen".
+// ═══════════════════════════════════════════════════════════════════════════
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+
+	// TODO: hernoem naar de naam van jouw project, bv. "crm-mcp-server"
+	"name": "template-neon-db-mcp",
+
+	"main": "src/index.ts",
+	"compatibility_date": "2025-03-10",
+
+	// nodejs_compat is nodig voor de OAuth-provider en de Neon-driver
+	"compatibility_flags": ["nodejs_compat"],
+
+	// De MCP-server draait als Durable Object: elke MCP-sessie krijgt precies
+	// één instantie, zodat sessiestatus (o.a. de geregistreerde tools per rol)
+	// bewaard blijft tussen requests binnen dezelfde sessie.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "MCP_OBJECT",
+				"class_name": "MyMCP"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["MyMCP"]
+		}
+	],
+
+	// KV-opslag voor de OAuth-provider (tokens, grants, client-registraties).
+	// De binding MOET "OAUTH_KV" heten — dat verwacht @cloudflare/workers-oauth-provider.
+	"kv_namespaces": [
+		{
+			"binding": "OAUTH_KV",
+			// TODO: vervang door het echte KV-namespace-ID (zie README stap 4).
+			// Voor lokaal ontwikkelen (wrangler dev) mag deze placeholder blijven staan.
+			"id": "VERVANG_MIJ_DOOR_JOUW_KV_NAMESPACE_ID"
+		}
+	],
+
+	"observability": {
+		"enabled": true
+	},
+
+	// Vaste dev-poort zodat de redirect-URI http://localhost:8792/callback
+	// in Azure altijd klopt. Wijzig je deze poort, wijzig hem dan ook in Azure
+	// én in de README.
+	"dev": {
+		"port": 8792
+	}
+}
