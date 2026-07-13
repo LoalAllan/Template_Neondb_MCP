@@ -46,7 +46,8 @@ Deze template bevat **bewust nog geen businesstools** — alleen de complete bas
 
 ## Vereisten
 
-- **Node.js 20+** en npm
+- **Node.js 20+** en **pnpm** (installeer met `corepack enable pnpm` of `npm install -g pnpm`)
+  > Liever toch npm? Dat kan: verwijder `pnpm-lock.yaml` en vervang in de commando's `pnpm run` door `npm run`, `pnpm exec` door `npx` en `pnpm dlx` door `npx`.
 - Een **Cloudflare-account** (gratis volstaat) met de [wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
 - Een **Azure-tenant** waarin je een App Registration mag aanmaken
 - Een **Neon-database** (typisch die van je bestaande applicatie)
@@ -59,15 +60,15 @@ Werk deze checklist van boven naar beneden af. Elke stap verwijst naar een detai
 
 | # | Actie | Waar | Verificatie |
 |---|---|---|---|
-| 1 | `npm install` | projectmap | geen fouten |
-| 2 | Kies de rolniveaus (1, 2 of 3 stuks) | [`src/rollen.config.ts`](src/rollen.config.ts) → zie **Stap 1** | `npm run type-check` schoon |
+| 1 | `pnpm install` | projectmap | geen fouten |
+| 2 | Kies de rolniveaus (1, 2 of 3 stuks) | [`src/rollen.config.ts`](src/rollen.config.ts) → zie **Stap 1** | `pnpm run type-check` schoon |
 | 3 | Maak of wijzig de gebruikerstabel in Neon | SQL uit **Stap 2** (variant A óf B) | `SELECT` geeft je testgebruiker met `mcp_rol >= 1` |
 | 4 | Maak de Azure App Registration | Azure Portal → zie **Stap 3** | je hebt client-ID, tenant-ID en een client secret |
-| 5 | Maak de KV-namespace en vul het ID in | `npx wrangler kv namespace create OAUTH_KV` → ID in [`wrangler.jsonc`](wrangler.jsonc) | geen `VERVANG_MIJ`-placeholder meer |
+| 5 | Maak de KV-namespace en vul het ID in | `pnpm exec wrangler kv namespace create OAUTH_KV` → ID in [`wrangler.jsonc`](wrangler.jsonc) | geen `VERVANG_MIJ`-placeholder meer |
 | 6 | Kies een Worker-naam | `"name"` in [`wrangler.jsonc`](wrangler.jsonc) | — |
-| 7 | Kopieer `.dev.vars.example` → `.dev.vars` en vul de 5 waarden in | projectmap → zie **Stap 5** | `npm run dev` start zonder fouten |
+| 7 | Kopieer `.dev.vars.example` → `.dev.vars` en vul de 5 waarden in | projectmap → zie **Stap 5** | `pnpm run dev` start zonder fouten |
 | 8 | Test lokaal met de MCP Inspector | zie **Stap 5** | `wie_ben_ik` geeft je naam, e-mail en rol terug |
-| 9 | Zet de 5 secrets in productie en deploy | `npx wrangler secret put ...` + `npm run deploy` → zie **Stap 6** | — |
+| 9 | Zet de 5 secrets in productie en deploy | `pnpm exec wrangler secret put ...` + `pnpm run deploy` → zie **Stap 6** | — |
 | 10 | Voeg de productie-redirect-URI toe in Azure | `https://<jouw-worker>.workers.dev/callback` | login werkt via de gedeployde URL |
 | 11 | Verbind je MCP-client | zie **Stap 6** | `wie_ben_ik` werkt in de client |
 
@@ -188,10 +189,10 @@ export const ROL_KOLOM = "mcp_rol";
 
 ```bash
 # Eénmalig inloggen bij Cloudflare
-npx wrangler login
+pnpm exec wrangler login
 
 # KV-namespace aanmaken voor de OAuth-opslag (tokens, grants)
-npx wrangler kv namespace create OAUTH_KV
+pnpm exec wrangler kv namespace create OAUTH_KV
 ```
 
 Het tweede commando geeft een **ID** terug. Zet dat in [`wrangler.jsonc`](wrangler.jsonc):
@@ -216,7 +217,7 @@ Kies in hetzelfde bestand ook een unieke naam voor je Worker (`"name"`).
 cp .dev.vars.example .dev.vars
 
 # 2. Dev-server starten op http://localhost:8792
-npm run dev
+pnpm run dev
 ```
 
 In `.dev.vars` vul je de vijf waarden in: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `COOKIE_ENCRYPTION_KEY` (genereer met `openssl rand -hex 32`) en `DATABASE_URL` (je Neon connection string, bij voorkeur de *pooled* variant met `-pooler` in de hostnaam).
@@ -224,7 +225,7 @@ In `.dev.vars` vul je de vijf waarden in: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRE
 ### Testen met de MCP Inspector
 
 ```bash
-npx @modelcontextprotocol/inspector
+pnpm dlx @modelcontextprotocol/inspector
 ```
 
 1. Open de Inspector in je browser, kies transport **Streamable HTTP** en URL `http://localhost:8792/mcp`.
@@ -238,14 +239,14 @@ npx @modelcontextprotocol/inspector
 
 ```bash
 # De 5 secrets in productie zetten (zelfde waarden als .dev.vars, of aparte prod-app-registratie)
-npx wrangler secret put AZURE_CLIENT_ID
-npx wrangler secret put AZURE_CLIENT_SECRET
-npx wrangler secret put AZURE_TENANT_ID
-npx wrangler secret put COOKIE_ENCRYPTION_KEY
-npx wrangler secret put DATABASE_URL
+pnpm exec wrangler secret put AZURE_CLIENT_ID
+pnpm exec wrangler secret put AZURE_CLIENT_SECRET
+pnpm exec wrangler secret put AZURE_TENANT_ID
+pnpm exec wrangler secret put COOKIE_ENCRYPTION_KEY
+pnpm exec wrangler secret put DATABASE_URL
 
 # Deployen
-npm run deploy
+pnpm run deploy
 ```
 
 Vergeet niet de productie-redirect-URI toe te voegen in Azure (stap 3, punt 7): `https://<jouw-worker>.<jouw-account>.workers.dev/callback`.
@@ -275,6 +276,8 @@ Gebruik [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) als brug, bv. i
 }
 ```
 
+> Hier staat bewust `npx`: deze configuratie draait op de machine van de eindgebruiker, los van deze repo en zijn package manager.
+
 ---
 
 ## Verifiëren dat alles werkt
@@ -282,7 +285,7 @@ Gebruik [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) als brug, bv. i
 1. **`wie_ben_ik`** aanroepen → juiste naam, e-mail en rolniveau.
 2. **Rolwijziging testen**: zet in de database `mcp_rol` op een andere waarde, start een **nieuwe** sessie (verbinding verbreken en opnieuw verbinden) → het nieuwe niveau is actief.
 3. **Weigering testen**: zet `mcp_rol` op `0` (of verwijder de rij) en log in → je krijgt de melding *"Toegang geweigerd"* met je e-mailadres erbij.
-4. **Logs bekijken** tijdens het testen: `npx wrangler tail` (productie) of de console van `npm run dev` (lokaal).
+4. **Logs bekijken** tijdens het testen: `pnpm exec wrangler tail` (productie) of de console van `pnpm run dev` (lokaal).
 
 ---
 
@@ -293,7 +296,7 @@ Dat is waar deze template voor gemaakt is. Het recept in het kort:
 1. Maak `src/tools/<naam>.ts` naar het voorbeeld van [`src/tools/wie-ben-ik.ts`](src/tools/wie-ben-ik.ts);
 2. Kies het `MIN_NIVEAU` van de tool;
 3. Voeg één regel toe in [`src/tools/register-tools.ts`](src/tools/register-tools.ts);
-4. `npm run type-check`.
+4. `pnpm run type-check`.
 
 Het volledige recept — inclusief database-toegang, rol-gating en valkuilen — staat in **[CLAUDE.md](CLAUDE.md)**. Geef dat bestand aan je AI coding agent; het is er speciaal voor geschreven.
 

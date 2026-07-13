@@ -3,7 +3,7 @@
 //
 // Dit bestand is handgeschreven als startpunt. Voeg je nieuwe bindings toe in
 // wrangler.jsonc (bv. R2, D1, extra KV), hergenereer dan de types met:
-//   npm run cf-typegen
+//   pnpm run cf-typegen
 // en neem de secrets hieronder opnieuw op als ze uit de output verdwijnen.
 // ═══════════════════════════════════════════════════════════════════════════
 

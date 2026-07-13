@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# Lokale secrets voor `npm run dev` (wrangler dev).
+# Lokale secrets voor `pnpm run dev` (wrangler dev).
 #
 # Gebruik:
 #   1. Kopieer dit bestand naar `.dev.vars` (zonder .example)
@@ -7,7 +7,7 @@
 #
 # LET OP: `.dev.vars` staat in .gitignore en mag NOOIT gecommit worden.
 # Voor productie zet je dezelfde vijf waarden als Worker-secrets:
-#   npx wrangler secret put AZURE_CLIENT_ID        (enz. — zie README stap 4)
+#   pnpm exec wrangler secret put AZURE_CLIENT_ID  (enz. — zie README stap 4)
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Application (client) ID van je Azure App Registration

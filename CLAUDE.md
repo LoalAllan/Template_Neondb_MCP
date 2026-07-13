@@ -36,12 +36,14 @@ MCP-client → POST /mcp (Bearer-token)
 ## Commando's
 
 ```bash
-npm run dev         # dev-server op http://localhost:8792
-npm run type-check  # tsc --noEmit — draai dit na ELKE wijziging
-npm run deploy      # wrangler deploy
-npm run cf-typegen  # types hergenereren na wijzigingen in wrangler.jsonc
-npx wrangler tail   # live logs van de gedeployde Worker
-npx wrangler secret put <NAAM>   # secret in productie zetten
+pnpm install         # dependencies installeren (dit project gebruikt pnpm!)
+pnpm run dev         # dev-server op http://localhost:8792
+pnpm run type-check  # tsc --noEmit — draai dit na ELKE wijziging
+pnpm run deploy      # wrangler deploy — LET OP: altijd `pnpm run deploy`,
+                     # want `pnpm deploy` (zonder run) is een ingebouwd pnpm-commando
+pnpm run cf-typegen  # types hergenereren na wijzigingen in wrangler.jsonc
+pnpm exec wrangler tail             # live logs van de gedeployde Worker
+pnpm exec wrangler secret put <NAAM>  # secret in productie zetten
 ```
 
 ## Recept: nieuwe tool toevoegen
@@ -91,7 +93,7 @@ export function registreerKlantTools(server: McpServer, env: Env, props: Props, 
 registreerKlantTools(server, env, props, rol);
 ```
 
-**Stap 4** — `npm run type-check` moet schoon zijn.
+**Stap 4** — `pnpm run type-check` moet schoon zijn.
 
 Meerdere gerelateerde tools mogen samen in één module (één `registreer<Naam>`-functie, per tool eventueel een eigen niveau-check als ze verschillen).
 
@@ -146,8 +148,8 @@ Gebruik dit spaarzaam: elke aanroep kost een extra database-query.
 
 ## Verificatiechecklist na elke wijziging
 
-1. `npm run type-check` → schoon.
-2. `npm run dev` → start zonder fouten.
+1. `pnpm run type-check` → schoon.
+2. `pnpm run dev` → start zonder fouten.
 3. `curl http://localhost:8792/.well-known/oauth-authorization-server` → JSON met endpoints.
-4. Met de MCP Inspector (`npx @modelcontextprotocol/inspector`, Streamable HTTP, `http://localhost:8792/mcp`): inloggen en controleren dat de toolset klopt voor het rolniveau van de testgebruiker.
+4. Met de MCP Inspector (`pnpm dlx @modelcontextprotocol/inspector`, Streamable HTTP, `http://localhost:8792/mcp`): inloggen en controleren dat de toolset klopt voor het rolniveau van de testgebruiker.
 5. Bij nieuwe tools: de tool aanroepen met geldige én ongeldige invoer; foutpad geeft een nette Nederlandse melding via `createErrorResponse`.

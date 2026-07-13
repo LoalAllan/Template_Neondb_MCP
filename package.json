@@ -22,5 +22,9 @@
 		"@cloudflare/workers-types": "^4.20260424.1",
 		"typescript": "^5.8.3",
 		"wrangler": "~4.105.0"
+	},
+	"pnpm": {
+		"onlyBuiltDependencies": ["esbuild", "sharp", "workerd"],
+		"ignoredBuiltDependencies": ["core-js-pure"]
 	}
 }
