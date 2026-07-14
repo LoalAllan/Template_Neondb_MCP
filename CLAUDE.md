@@ -33,6 +33,33 @@ MCP-client → POST /mcp (Bearer-token)
 | `src/tools/wie-ben-ik.ts` | Voorbeeldtool = het kopieerbare recept |
 | `src/utils/antwoorden.ts` | `createSuccessResponse`, `createErrorResponse`, `formatDatabaseError` |
 
+## Kernprincipes
+
+**BELANGRIJK: pas deze principes toe bij ELKE codewijziging:**
+
+### KISS (Keep It Simple, Stupid)
+
+- Eenvoud is een expliciet ontwerpdoel.
+- Kies waar mogelijk de rechttoe-rechtaan-oplossing boven de complexe.
+- Eenvoudige oplossingen zijn makkelijker te begrijpen, te onderhouden en te debuggen.
+
+### YAGNI (You Aren't Gonna Need It)
+
+- Bouw geen functionaliteit op speculatie.
+- Implementeer features pas wanneer ze nodig zijn, niet wanneer je verwacht dat ze ooit nuttig zouden kunnen worden.
+
+### Open/Closed-principe
+
+- Software-onderdelen moeten open zijn voor uitbreiding, maar gesloten voor wijziging.
+- Ontwerp zo dat nieuwe functionaliteit kan worden toegevoegd met minimale aanpassingen aan bestaande code — in dit project: nieuwe tools komen erbij als nieuwe module in `src/tools/` plus één regel in de registry, zonder bestaande code te wijzigen.
+
+## Package management & tooling
+
+**CRUCIAAL: dit project gebruikt pnpm (níét npm) voor Node.js-packagebeheer en de Wrangler CLI voor Cloudflare Workers-ontwikkeling.**
+
+- Installeer dependencies uitsluitend met `pnpm install`; commit nooit een `package-lock.json` of `yarn.lock` naast de `pnpm-lock.yaml`.
+- Draai Wrangler altijd via het project (`pnpm run <script>` of `pnpm exec wrangler ...`), nooit via een los geïnstalleerde globale versie.
+
 ## Commando's
 
 ```bash
