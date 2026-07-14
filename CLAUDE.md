@@ -29,6 +29,7 @@ MCP-client → POST /mcp (Bearer-token)
 | `src/auth/goedkeuring.ts` | Goedkeuringsdialoog + HMAC-ondertekend cookie + `sanitizeHtml` |
 | `src/database/verbinding.ts` | `getDb()` (Neon HTTP-driver) + `withDatabase()` wrapper |
 | `src/database/gebruikers.ts` | `zoekGebruikerOpEmail()`, `controleerActueleRol()` |
+| `src/database/veiligheid.ts` | `valideerSqlQuery()`, `isSchrijfOperatie()` — vangnet voor tools met ruwe SQL |
 | `src/tools/register-tools.ts` | Centrale tool-registry — hier sluit je nieuwe modules aan |
 | `src/tools/wie-ben-ik.ts` | Voorbeeldtool = het kopieerbare recept |
 | `src/utils/antwoorden.ts` | `createSuccessResponse`, `createErrorResponse`, `formatDatabaseError` |
@@ -149,6 +150,74 @@ Gebruik dit spaarzaam: elke aanroep kost een extra database-query.
 - Dynamische tabel-/kolomnamen kunnen niet als parameter; die mogen alleen uit `rollen.config.ts` komen en gaan door de whitelist in `database/gebruikers.ts` (`veiligeIdentifier`). Introduceer geen andere identifier-interpolatie.
 - Meerdere statements in één transactie: `sql.transaction([...])` (niet-interactief; de HTTP-driver ondersteunt geen `BEGIN`/`COMMIT` over meerdere requests).
 - Fouten richting de gebruiker altijd door `formatDatabaseError()` halen (verbergt connection strings en credentials).
+
+## Recept: een tool die ruwe SQL accepteert
+
+Soms wil je een generieke query-tool waarbij de AI-client zelf SQL aanlevert (lezen én — voor hoge rollen — schrijven). Dat mag, maar ALLEEN volgens dit recept. De regels:
+
+1. **Lees- en schrijf-tools zijn gescheiden tools** met verschillende `MIN_NIVEAU`'s (lezen laag, schrijven het hoogste niveau).
+2. **Altijd eerst `valideerSqlQuery()`** (uit `src/database/veiligheid.ts`).
+3. **De lees-tool weigert schrijfoperaties** via `isSchrijfOperatie()`.
+4. **De schrijf-tool doet een live rolcheck per aanroep** via `controleerActueleRol()` — een ingetrokken rol moet ook binnen een lopende sessie direct effect hebben.
+5. **De échte bescherming van de lees-tool is een read-only databaserol in Neon**: maak in Neon een rol met alleen `SELECT`-rechten, zet die connection string als apart secret (bv. `DATABASE_URL_READONLY`) en gebruik hem in de lees-tool. De regex-checks zijn de tweede verdedigingslinie, niet de eerste.
+6. **Begrens de output**: dwing een `LIMIT` af of kap het aantal geretourneerde rijen af, zodat één query de context van de client niet opblaast.
+
+```ts
+import { z } from "zod";
+import { isSchrijfOperatie, valideerSqlQuery } from "../database/veiligheid";
+import { controleerActueleRol } from "../database/gebruikers";
+import { withDatabase } from "../database/verbinding";
+import { createErrorResponse, createSuccessResponse, formatDatabaseError } from "../utils/antwoorden";
+
+// ── LEES-TOOL (bv. MIN_NIVEAU = 1) ──────────────────────────────────────
+server.tool(
+	"lees_query",
+	"Voert een read-only SQL-query (SELECT) uit op de database en geeft de rijen terug.",
+	{
+		sql: z.string().min(1).describe("De uit te voeren SELECT-query (alleen lezen)"),
+	},
+	async ({ sql: queryTekst }) => {
+		const validatie = valideerSqlQuery(queryTekst);
+		if (!validatie.geldig) return createErrorResponse(validatie.fout ?? "Ongeldige query.");
+		if (isSchrijfOperatie(queryTekst)) {
+			return createErrorResponse("Deze tool voert alleen leesqueries uit. Gebruik de schrijf-tool (indien je rol dat toelaat).");
+		}
+		try {
+			// Idealiter via een read-only rol: neon(env.DATABASE_URL_READONLY)
+			const rijen = await withDatabase(env, async (sql) => sql.query(queryTekst));
+			return createSuccessResponse(`${(rijen as unknown[]).length} rij(en) gevonden.`, rijen);
+		} catch (fout) {
+			return createErrorResponse(formatDatabaseError(fout));
+		}
+	},
+);
+
+// ── SCHRIJF-TOOL (MIN_NIVEAU = MAX_NIVEAU) ──────────────────────────────
+server.tool(
+	"voer_sql_uit",
+	"Voert een SQL-statement uit dat de database mag wijzigen (INSERT, UPDATE, DELETE, ...). Alleen voor het hoogste rolniveau.",
+	{
+		sql: z.string().min(1).describe("Het uit te voeren SQL-statement"),
+	},
+	async ({ sql: queryTekst }) => {
+		// Live her-check: rol kan tijdens de sessie ingetrokken zijn.
+		if (!(await controleerActueleRol(env, props.email, MIN_NIVEAU))) {
+			return createErrorResponse("Je rol is gewijzigd; deze actie is niet meer toegestaan.");
+		}
+		const validatie = valideerSqlQuery(queryTekst);
+		if (!validatie.geldig) return createErrorResponse(validatie.fout ?? "Ongeldige query.");
+		try {
+			const resultaat = await withDatabase(env, async (sql) => sql.query(queryTekst));
+			console.log(`Schrijfoperatie door ${props.email}: ${queryTekst.slice(0, 100)}`);
+			return createSuccessResponse("Statement uitgevoerd.", resultaat);
+		} catch (fout) {
+			return createErrorResponse(formatDatabaseError(fout));
+		}
+	},
+);
+```
+
+> **Weet wat het vangnet wél en niet is:** `valideerSqlQuery` stopt de overduidelijke ongelukken (DROP, TRUNCATE, "WHERE 1=1"-verwijderingen, gestapelde statements). Het stopt géén doordachte aanvallen — daarvoor bestaan de read-only databaserol en de rolniveaus. De Neon HTTP-driver voert bovendien maar één statement per aanroep uit, wat gestapelde injecties sowieso blokkeert.
 
 ## Zod v4 + MCP SDK: valkuilen
 
