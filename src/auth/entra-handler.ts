@@ -25,7 +25,7 @@ import { decodeerIdToken, getAuthorizeUrl, wisselCodeIn } from "./entra";
 import { clientIsAlGoedgekeurd, renderGoedkeuringsDialoog, sanitizeHtml, verwerkGoedkeuring } from "./goedkeuring";
 
 /** Naam van de server zoals getoond in de goedkeuringsdialoog. */
-const SERVER_NAAM = "Neon CRM MCP-server"; // TODO: pas aan naar de naam van jouw applicatie
+const SERVER_NAAM = "Memoran connector MCP";
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
@@ -64,17 +64,39 @@ app.get("/authorize", async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// POST /authorize — de gebruiker heeft de dialoog goedgekeurd
+// POST /authorize — de gebruiker heeft de dialoog goedgekeurd of geweigerd
 // ═══════════════════════════════════════════════════════════════════════════
 app.post("/authorize", async (c) => {
 	try {
-		const { state, headers } = await verwerkGoedkeuring(c.req.raw, c.env.COOKIE_ENCRYPTION_KEY);
+		const { state, actie, headers } = await verwerkGoedkeuring(c.req.raw, c.env.COOKIE_ENCRYPTION_KEY);
+		if (actie === "weigeren") {
+			return weigerToegang(state.oauthReqInfo);
+		}
 		return redirectNaarEntra(c.req.raw, state.oauthReqInfo, c.env, headers);
 	} catch (fout) {
 		console.error("Fout bij het verwerken van de goedkeuring:", fout);
 		return c.text("De goedkeuring kon niet worden verwerkt. Start het inloggen opnieuw.", 400);
 	}
 });
+
+/**
+ * De gebruiker klikte "Annuleren": stuur de browser terug naar de redirect-URI
+ * van de MCP-client met de OAuth-standaardfout `access_denied`, zodat de
+ * client zelf netjes kan tonen dat de toegang geweigerd is.
+ */
+function weigerToegang(oauthReqInfo: Record<string, any>): Response {
+	const redirectUri: unknown = oauthReqInfo?.redirectUri;
+	if (typeof redirectUri !== "string" || !redirectUri) {
+		throw new Error("De OAuth-aanvraag bevat geen redirect-URI om de weigering aan te melden.");
+	}
+	const url = new URL(redirectUri);
+	url.searchParams.set("error", "access_denied");
+	url.searchParams.set("error_description", "De gebruiker heeft de toegang geweigerd.");
+	if (typeof oauthReqInfo.state === "string" && oauthReqInfo.state) {
+		url.searchParams.set("state", oauthReqInfo.state);
+	}
+	return Response.redirect(url.href, 302);
+}
 
 /**
  * Stuurt de browser door naar het Entra ID login-scherm.
