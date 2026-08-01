@@ -1,25 +1,25 @@
 /**
  * Centrale tool-registry.
  *
- * Dit is de ENIGE plek waar tool-modules worden aangesloten. MyMCP.init()
- * (src/index.ts) roept deze functie één keer per MCP-sessie aan, mét het
- * verse rolniveau van de gebruiker uit de database.
+ * MyMCP.init() (src/index.ts) roept deze functie één keer per MCP-sessie aan,
+ * mét het verse rolnummer van de gebruiker uit de database.
  *
- * Elke tool-module beslist ZELF of hij registreert, op basis van zijn eigen
- * MIN_NIVEAU (zie src/tools/wie-ben-ik.ts als voorbeeld). Gebruikers met een
- * te laag niveau krijgen de tool daardoor nooit te zien.
+ * ⚠️ HIER KOMEN GEEN TOOLS BIJ.
+ *
+ * Deze server heeft bewust maar drie tools — lijst_tabellen, lees_query en
+ * voer_sql_uit — en die dekken samen alles af. Wil je een rol méér of minder
+ * laten zien, dan pas je de tabellen van die rol aan (rollen.config.ts + de
+ * GRANT's in Neon), niet de toolset.
+ *
+ * De harde grenzen en de verplichte procedure staan in
+ * .claude/rules/mcp-rechten.md. Extra tools registreren mag uitsluitend met
+ * expliciete toestemming van de eigenaar van het project.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Props } from "../types";
-import { registreerWieBenIk } from "./wie-ben-ik";
+import { registreerSqlTools } from "./sql-tools";
 
 export function registreerAlleTools(server: McpServer, env: Env, props: Props, rol: number): void {
-	// ── TOOL-REGISTRATIE ────────────────────────────────────────────────
-	// Voeg hier één regel toe per nieuwe tool-module:
-
-	registreerWieBenIk(server, env, props, rol);
-
-	// Voorbeeld voor je volgende module (zie CLAUDE.md voor het recept):
-	// registreerKlantTools(server, env, props, rol);
+	registreerSqlTools(server, env, props, rol);
 }

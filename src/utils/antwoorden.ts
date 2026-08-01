@@ -62,6 +62,14 @@ export function formatDatabaseError(fout: unknown): string {
 	if (/postgres(ql)?:\/\//i.test(boodschap) || /password|wachtwoord/i.test(boodschap)) {
 		return "Er is een databasefout opgetreden (details staan in de serverlogs).";
 	}
+	// Postgres weigert de tabel: dat is geen storing maar het rechtenmodel dat
+	// zijn werk doet. Zie rollen.config.ts — elke rol heeft eigen GRANT's.
+	if (/permission denied/i.test(boodschap)) {
+		return (
+			"Je rol heeft geen toegang tot die tabel. " +
+			"Gebruik `lijst_tabellen` om te zien welke tabellen je wél mag benaderen."
+		);
+	}
 	// Time-outs apart benoemen: meestal een tijdelijk probleem
 	if (/timeout|timed out/i.test(boodschap)) {
 		return "De database reageerde niet op tijd. Probeer het zo meteen opnieuw.";

@@ -24,8 +24,28 @@ declare global {
 		AZURE_TENANT_ID: string;
 		/** Sleutel (64 hex-tekens) voor het ondertekenen van goedkeurings-cookies. */
 		COOKIE_ENCRYPTION_KEY: string;
-		/** Neon Postgres connection string. */
+
+		// ── Database-verbindingen ──────────────────────────────────────────
+		/**
+		 * AUTH-verbinding: wordt UITSLUITEND gebruikt om op te zoeken welke rol
+		 * een ingelogde gebruiker heeft (src/database/gebruikers.ts). Dit is de
+		 * enige verbinding die de gebruikerstabel mag lezen; tools raken hem
+		 * nooit aan.
+		 */
 		DATABASE_URL: string;
+
+		/**
+		 * ROL-verbindingen: per MCP-rol de connection string van de Postgres-rol
+		 * met GRANT's op precies de tabellen van die rol. De namen moeten
+		 * overeenkomen met `secretNaam` in src/rollen.config.ts.
+		 *
+		 * Optioneel getypeerd omdat een klant met 2 rollen er ook maar 2 zet.
+		 * Ontbreekt een secret, dan geeft getRolDb() een duidelijke melding.
+		 */
+		DATABASE_URL_ROL_1?: string;
+		DATABASE_URL_ROL_2?: string;
+		DATABASE_URL_ROL_3?: string;
+		DATABASE_URL_ROL_4?: string;
 	}
 }
 

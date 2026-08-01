@@ -6,9 +6,13 @@
  * beheerders de toegang eenvoudig kunnen beheren vanuit de UI van de
  * applicatie. Het onveranderlijke Azure object-ID (oid) wordt wel gelogd
  * voor traceerbaarheid, maar is niet de matching-sleutel.
+ *
+ * Dit bestand is de ENIGE plek die de AUTH-verbinding (DATABASE_URL) gebruikt.
+ * Geen enkele MCP-rol heeft een GRANT op de gebruikerstabel — anders kon een
+ * gebruiker met schrijfrechten zijn eigen rolniveau ophogen.
  */
 
-import { EMAIL_KOLOM, GEBRUIKERS_TABEL, ROL_KOLOM, heeftNiveau } from "../rollen.config";
+import { EMAIL_KOLOM, GEBRUIKERS_TABEL, ROL_KOLOM } from "../rollen.config";
 import type { GebruikerRij } from "../types";
 import { getDb } from "./verbinding";
 
@@ -57,21 +61,22 @@ export async function zoekGebruikerOpEmail(env: Env, email: string): Promise<Geb
 }
 
 /**
- * Controleert LIVE (met een verse database-query) of een gebruiker op dit
- * moment minstens `minNiveau` heeft.
+ * Haalt LIVE (met een verse database-query) op welke rol een gebruiker op dit
+ * moment heeft. Geeft 0 terug als de gebruiker niet bestaat of geen rol heeft.
  *
- * Standaard worden tools al per sessie gefilterd op rol (zie MyMCP.init in
- * src/index.ts); deze extra check is bedoeld voor destructieve tools die
- * óók binnen een lopende sessie zeker willen zijn dat de rol niet net is
- * ingetrokken. Gebruik hem spaarzaam: elke aanroep kost een database-query.
+ * De rol wordt normaal één keer per sessie opgezocht (zie MyMCP.init in
+ * src/index.ts). Deze functie is bedoeld voor de schrijf-tool, die óók binnen
+ * een lopende sessie zeker wil weten dat de rol niet net gewijzigd of
+ * ingetrokken is. Gebruik hem spaarzaam: elke aanroep kost een query.
  *
- * Voorbeeldgebruik bovenaan een tool-handler:
+ * LET OP: het rolmodel is NIET hiërarchisch. Vergelijk dus op gelijkheid met
+ * de rol waarmee de sessie gestart is, niet op "groter dan":
  *
- *   if (!(await controleerActueleRol(env, props.email, 3))) {
+ *   if ((await haalHuidigeRol(env, props.email)) !== rol) {
  *     return createErrorResponse("Je rol is gewijzigd; deze actie is niet meer toegestaan.");
  *   }
  */
-export async function controleerActueleRol(env: Env, email: string, minNiveau: number): Promise<boolean> {
+export async function haalHuidigeRol(env: Env, email: string): Promise<number> {
 	const gebruiker = await zoekGebruikerOpEmail(env, email);
-	return heeftNiveau(gebruiker?.mcp_rol ?? 0, minNiveau);
+	return gebruiker?.mcp_rol ?? 0;
 }

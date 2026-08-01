@@ -1,10 +1,14 @@
 # CLAUDE.md — Gids voor AI coding agents
 
-Dit bestand is de handleiding voor AI-agents (en developers) die aan deze MCP-server werken. Lees het volledig voordat je tools toevoegt of code wijzigt.
+Dit bestand is de handleiding voor AI-agents (en developers) die aan deze MCP-server werken. Lees het volledig voordat je code wijzigt.
+
+> **Lees eerst het regelbestand.** Alles wat met rollen, tabellen en rechten te maken heeft, valt onder [`.claude/rules/mcp-rechten.md`](.claude/rules/mcp-rechten.md). Dat bestand is bindend en gaat vóór wat hier staat. Kernpunten: **maximaal 3 tools per rol**, **maximaal 4 rollen**, **nooit verwijderen of structuurwijzigingen**, en **elke rechtenwijziging wordt gelogd** in `.claude/rules/<Bedrijfsapp>_MCP_rules.md`.
 
 ## Projectoverzicht
 
-Remote MCP-server op Cloudflare Workers. Login via Microsoft Entra ID (single-tenant), autorisatie via rolniveaus in een Neon Postgres-database, transport **uitsluitend Streamable HTTP** op `/mcp`.
+Deze repo is een **template**. Hij wordt per klant geïntegreerd in de codebase van een bedrijfs- of CRM-applicatie, als submap `mcp-server/`. Elke klant krijgt zo een eigen remote MCP-server op zijn eigen Cloudflare-account, die praat met de Neon-database van zijn applicatie.
+
+Login via Microsoft Entra ID (single-tenant, de tenant van de klant), autorisatie via een rolnummer in de gebruikerstabel van de Neon-database, transport **uitsluitend Streamable HTTP** op `/mcp`.
 
 **Dataflow:**
 
@@ -12,9 +16,10 @@ Remote MCP-server op Cloudflare Workers. Login via Microsoft Entra ID (single-te
 MCP-client → POST /mcp (Bearer-token)
   → OAuthProvider (src/index.ts, export default): token valideren, props ontsleutelen
   → MyMCP Durable Object (src/index.ts): init() draait 1× per sessie
-      → zoekGebruikerOpEmail() → rolniveau vers uit Neon
-      → registreerAlleTools(server, env, props, rol) → alleen tools ≥ rolniveau
-  → tool-handlers → Neon (via withDatabase)
+      → zoekGebruikerOpEmail() → rolnummer vers uit Neon (auth-verbinding)
+      → isGeldigeRol() → onbekend nummer = geen toegang
+      → registreerAlleTools(server, env, props, rol) → de 2 of 3 tools van die rol
+  → tool-handlers → Neon via withRolDatabase(env, rol, ...) → de verbinding van díé rol
 ```
 
 **Bestanden:**
@@ -22,17 +27,19 @@ MCP-client → POST /mcp (Bearer-token)
 | Bestand | Rol |
 |---|---|
 | `src/index.ts` | Entrypoint: `MyMCP` (McpAgent/Durable Object) + `OAuthProvider`-wiring |
-| `src/rollen.config.ts` | ⭐ Rolniveaus + tabel-/kolomnamen — het enige config-bestand |
+| `src/rollen.config.ts` | ⭐ De rollen, hun tabellen en hun secrets — het enige config-bestand |
 | `src/types.ts` | `Props` (identiteit uit het token; bevat bewust GEEN rol) en `GebruikerRij` |
 | `src/auth/entra-handler.ts` | Hono-app: `/authorize`, `/callback` (poortwachter), `/` |
 | `src/auth/entra.ts` | Entra-endpoints: authorize-URL, code-inwisseling, id_token-decodering |
 | `src/auth/goedkeuring.ts` | Goedkeuringsdialoog + HMAC-ondertekend cookie + `sanitizeHtml` |
-| `src/database/verbinding.ts` | `getDb()` (Neon HTTP-driver) + `withDatabase()` wrapper |
-| `src/database/gebruikers.ts` | `zoekGebruikerOpEmail()`, `controleerActueleRol()` |
-| `src/database/veiligheid.ts` | `valideerSqlQuery()`, `isSchrijfOperatie()` — vangnet voor tools met ruwe SQL |
-| `src/tools/register-tools.ts` | Centrale tool-registry — hier sluit je nieuwe modules aan |
-| `src/tools/wie-ben-ik.ts` | Voorbeeldtool = het kopieerbare recept |
+| `src/database/verbinding.ts` | `getDb()`/`withDatabase()` (auth) en `getRolDb()`/`withRolDatabase()` (per rol) |
+| `src/database/gebruikers.ts` | `zoekGebruikerOpEmail()`, `haalHuidigeRol()` |
+| `src/database/veiligheid.ts` | `valideerLeesQuery()`, `valideerSchrijfStatement()` — allowlist van statementsoorten |
+| `src/tools/sql-tools.ts` | De drie tools: `lijst_tabellen`, `lees_query`, `voer_sql_uit` |
+| `src/tools/register-tools.ts` | Tool-registry — er komen hier geen tools bij |
 | `src/utils/antwoorden.ts` | `createSuccessResponse`, `createErrorResponse`, `formatDatabaseError` |
+| `.claude/rules/mcp-rechten.md` | ⭐ Bindende regels voor het rechtenmodel |
+| `.claude/rules/Bedrijfsapp_MCP_rules.md` | Sjabloon voor het rechtenlogboek per klant |
 
 ## Kernprincipes
 
@@ -52,7 +59,7 @@ MCP-client → POST /mcp (Bearer-token)
 ### Open/Closed-principe
 
 - Software-onderdelen moeten open zijn voor uitbreiding, maar gesloten voor wijziging.
-- Ontwerp zo dat nieuwe functionaliteit kan worden toegevoegd met minimale aanpassingen aan bestaande code — in dit project: nieuwe tools komen erbij als nieuwe module in `src/tools/` plus één regel in de registry, zonder bestaande code te wijzigen.
+- In dit project betekent dat concreet: een nieuwe klant of een nieuwe rol vraagt om een entry in `ROLLEN` plus `GRANT`'s in Neon — niet om nieuwe code.
 
 ## Package management & tooling
 
@@ -60,6 +67,7 @@ MCP-client → POST /mcp (Bearer-token)
 
 - Installeer dependencies uitsluitend met `pnpm install`; commit nooit een `package-lock.json` of `yarn.lock` naast de `pnpm-lock.yaml`.
 - Draai Wrangler altijd via het project (`pnpm run <script>` of `pnpm exec wrangler ...`), nooit via een los geïnstalleerde globale versie.
+- **`wrangler login` is interactief en laat je hangen.** Gebruik als agent een API-token in `CLOUDFLARE_API_TOKEN` — zie README, stap 5c.
 
 ## Commando's
 
@@ -74,178 +82,118 @@ pnpm exec wrangler tail             # live logs van de gedeployde Worker
 pnpm exec wrangler secret put <NAAM>  # secret in productie zetten
 ```
 
-## Recept: nieuwe tool toevoegen
+## Het rolmodel: scopes, geen niveaus
 
-**Stap 1** — Maak `src/tools/<naam>.ts` (bestandsnaam kebab-case, Nederlands):
+Dit is het belangrijkste ontwerpbesluit van de template.
 
-```ts
-import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { heeftNiveau } from "../rollen.config";
-import type { Props } from "../types";
-import { withDatabase } from "../database/verbinding";
-import { createErrorResponse, createSuccessResponse, formatDatabaseError } from "../utils/antwoorden";
+**Rollen zijn niet hiërarchisch.** Rol 2 is niet "meer" dan rol 1; rechten tellen nooit op. Elke rol is een eigen, afgesloten scope met een eigen database-verbinding.
 
-/** Minimaal vereist rolniveau voor deze module (zie src/rollen.config.ts). */
-const MIN_NIVEAU = 2;
+Elke rol krijgt **dezelfde toolnamen**: `lijst_tabellen`, `lees_query` en — zodra `rechten` niet `"lezen"` is — `voer_sql_uit`. Nooit varianten per rol. Zou een gebruiker meerdere query-tools naast elkaar zien, dan kan de AI-client niet meer verklaren waarom een tabel in de ene tool wél en in de andere niet bestaat.
 
-export function registreerKlantTools(server: McpServer, env: Env, props: Props, rol: number): void {
-	if (!heeftNiveau(rol, MIN_NIVEAU)) return; // rol-gating: NIET weglaten
+Wat een rol met data mag, staat in `RolConfig.rechten`:
 
-	server.tool(
-		"zoek_klant", // snake_case, Nederlands
-		"Zoekt klanten op (een deel van) hun naam en geeft maximaal 10 resultaten terug.",
-		{
-			zoekterm: z.string().min(1).describe("(Deel van) de klantnaam om op te zoeken"),
-		},
-		async ({ zoekterm }) => {
-			try {
-				const klanten = await withDatabase(env, async (sql) => {
-					return sql`SELECT id, naam, email FROM klanten
-					           WHERE naam ILIKE ${"%" + zoekterm + "%"} LIMIT 10`;
-				});
-				return createSuccessResponse(`${klanten.length} klant(en) gevonden.`, klanten);
-			} catch (fout) {
-				return createErrorResponse(formatDatabaseError(fout));
-			}
-		},
-	);
-}
-```
+| Waarde | Mag | `GRANT` in Neon |
+|---|---|---|
+| `lezen` | `SELECT` — onbeperkt lezen en analyseren | `SELECT` |
+| `toevoegen` | + nieuwe rijen toevoegen | `SELECT, INSERT` |
+| `wijzigen` | + bestaande rijen bijwerken | `SELECT, INSERT, UPDATE` |
 
-**Stap 2** — Kies `MIN_NIVEAU` bewust: lezen = laag niveau, schrijven = hoger, destructief = hoogste.
+`DELETE`, `TRUNCATE`, `DROP`, `CREATE` en `ALTER` staan hier bewust niet tussen: die zijn voor **geen enkele rol** mogelijk. Gebruik `magSchrijven(config.rechten)` in plaats van op de stringwaarde te vergelijken.
 
-**Stap 3** — Voeg één regel toe in `src/tools/register-tools.ts`:
+Er is dus **geen `heeftNiveau()` meer** en geen `MIN_NIVEAU` per tool. Vergelijk rollen altijd op **gelijkheid**, nooit met `>=`:
 
 ```ts
-registreerKlantTools(server, env, props, rol);
+// ✅ correct — de rol kan tijdens de sessie gewijzigd zijn
+if ((await haalHuidigeRol(env, props.email)) !== rol) { ... }
+
+// ❌ fout — suggereert een hiërarchie die niet bestaat
+if (rol >= 2) { ... }
 ```
 
-**Stap 4** — `pnpm run type-check` moet schoon zijn.
+Het rolnummer komt bij elke **nieuwe sessie** vers uit de database (`MyMCP.init`), zodat een rolwijziging doorwerkt zonder her-login. Voor `voer_sql_uit` gebeurt er bovendien per aanroep een live her-check.
 
-Meerdere gerelateerde tools mogen samen in één module (één `registreer<Naam>`-functie, per tool eventueel een eigen niveau-check als ze verschillen).
+## Waar de beveiliging zit
 
-## Recept: rol-gating
+In deze volgorde van belang:
 
-- **Standaard (altijd doen):** de `if (!heeftNiveau(rol, MIN_NIVEAU)) return;` bovenaan de registreer-functie. Tools zijn dan onzichtbaar voor te lage rollen. Het rolniveau komt bij elke **nieuwe sessie** vers uit de database.
-- **Extra (alleen voor destructieve tools):** een live her-check binnen de handler, zodat ook een rolwijziging *tijdens* een lopende sessie afgedwongen wordt:
+1. **`GRANT`'s in Neon.** Elke rol heeft een eigen Postgres-rol met rechten op precies de toegestane tabellen, en dus een eigen connection string (secret `DATABASE_URL_ROL_n`). Alles daarbuiten weigert Postgres zelf. Hier zit de echte grens. Drie eigenschappen maken verwijderen en structuurwijzigingen samen onmogelijk: geen `DELETE`/`TRUNCATE`-recht, geen eigenaarschap van de tabellen (een eigenaar kan altijd `DROP` en `ALTER`), en geen `CREATE` op het schema.
+2. **De `READ ONLY`-transactie** waarin `lees_query` draait: ook een rol mét schrijfrechten kan er niets mee wijzigen.
+3. **De allowlist** in `src/database/veiligheid.ts` — `valideerLeesQuery()` en `valideerSchrijfStatement()`. Die laten alleen `SELECT`, `WITH`, `INSERT` en (bij `wijzigen`) `UPDATE` door en weigeren al de rest op naam, mét uitleg. `normaliseerVoorAnalyse()` strookt eerst commentaar en stringliterals weg — anders glipt `-- x⏎DELETE FROM …` erdoor en geeft een onschuldige `WHERE tekst = 'graag verwijderen'` vals alarm. Dit is een vangnet dat een verkeerd gezette `GRANT` niet meteen fataal maakt, geen vervanging van laag 1.
 
-```ts
-import { controleerActueleRol } from "../database/gebruikers";
+De lijst `tabellen` in `rollen.config.ts` is **beschrijvend**: hij vult de tool-beschrijvingen. Twijfel je of hij klopt? Roep `lijst_tabellen` aan — die leest de werkelijke rechten uit `information_schema`.
 
-async ({ ... }) => {
-	if (!(await controleerActueleRol(env, props.email, MIN_NIVEAU))) {
-		return createErrorResponse("Je rol is gewijzigd; deze actie is niet meer toegestaan.");
-	}
-	// ... de eigenlijke actie
-}
-```
+De **auth-verbinding** (`DATABASE_URL`) staat hier los van: die leest alleen de gebruikerstabel, en geen enkele MCP-rol heeft daar een `GRANT` op. Anders kon een schrijfrol zijn eigen rolnummer ophogen.
 
-Gebruik dit spaarzaam: elke aanroep kost een extra database-query.
+## Recept: rechten van een rol wijzigen
 
-## Recept: database-toegang
+Dit is wat je in dit project het vaakst doet. Er komt geen code bij kijken behalve één regel config.
 
-- Altijd via `withDatabase(env, async (sql) => ...)` — geeft logging en uniforme foutafhandeling.
-- **Waarden ALTIJD als parameter** in de tagged template: `` sql`... WHERE id = ${id}` ``. De driver parametriseert dit automatisch (veilig tegen SQL-injectie). **NOOIT** gebruikersinvoer in de querystring concateneren.
+1. **Scope bepalen** — welke tabellen, lezen of ook schrijven. Vraag het als het niet expliciet is opgedragen.
+2. **In Neon:** `GRANT` of `REVOKE` op de Postgres-rol. Noteer de exacte SQL.
+3. **Secret zetten** als het om een nieuwe rol gaat: `pnpm exec wrangler secret put DATABASE_URL_ROL_<n>` (en in `.dev.vars` voor lokaal).
+4. **`ROLLEN` bijwerken** in `src/rollen.config.ts` (`naam`, `secretNaam`, `rechten`, `tabellen`) → `pnpm run type-check`.
+5. **Loggen** in `.claude/rules/<Bedrijfsapp>_MCP_rules.md` — sectie A (matrix) én sectie B (changelog), met de uitgevoerde SQL. **De wijziging is pas af als dit gebeurd is.**
+6. **Verifiëren** met `lijst_tabellen` als een gebruiker met die rol, plus de controlequery op `information_schema.role_table_grants` (nul rijen met `DELETE`/`TRUNCATE`).
+
+Kolommen of rijen afschermen doe je met een **view** in Neon: geef `SELECT` op de view, géén `GRANT` op de onderliggende tabel, en neem de view op in de allowlist alsof het een tabel is.
+
+## Recept: database-toegang in code
+
+- Tools draaien **altijd** via `withRolDatabase(env, rol, async (sql) => ...)`. Nooit via `withDatabase()` — dat is de auth-verbinding en die hoort de gebruikerstabel te lezen, meer niet.
+- **Waarden ALTIJD als parameter** in de tagged template: `` sql`... WHERE id = ${id}` ``. De driver parametriseert dit automatisch. **NOOIT** gebruikersinvoer in de querystring concateneren.
 - Dynamische tabel-/kolomnamen kunnen niet als parameter; die mogen alleen uit `rollen.config.ts` komen en gaan door de whitelist in `database/gebruikers.ts` (`veiligeIdentifier`). Introduceer geen andere identifier-interpolatie.
-- Meerdere statements in één transactie: `sql.transaction([...])` (niet-interactief; de HTTP-driver ondersteunt geen `BEGIN`/`COMMIT` over meerdere requests).
-- Fouten richting de gebruiker altijd door `formatDatabaseError()` halen (verbergt connection strings en credentials).
-
-## Recept: een tool die ruwe SQL accepteert
-
-Soms wil je een generieke query-tool waarbij de AI-client zelf SQL aanlevert (lezen én — voor hoge rollen — schrijven). Dat mag, maar ALLEEN volgens dit recept. De regels:
-
-1. **Lees- en schrijf-tools zijn gescheiden tools** met verschillende `MIN_NIVEAU`'s (lezen laag, schrijven het hoogste niveau).
-2. **Altijd eerst `valideerSqlQuery()`** (uit `src/database/veiligheid.ts`).
-3. **De lees-tool weigert schrijfoperaties** via `isSchrijfOperatie()`.
-4. **De schrijf-tool doet een live rolcheck per aanroep** via `controleerActueleRol()` — een ingetrokken rol moet ook binnen een lopende sessie direct effect hebben.
-5. **De échte bescherming van de lees-tool is een read-only databaserol in Neon**: maak in Neon een rol met alleen `SELECT`-rechten, zet die connection string als apart secret (bv. `DATABASE_URL_READONLY`) en gebruik hem in de lees-tool. De regex-checks zijn de tweede verdedigingslinie, niet de eerste.
-6. **Begrens de output**: dwing een `LIMIT` af of kap het aantal geretourneerde rijen af, zodat één query de context van de client niet opblaast.
-
-```ts
-import { z } from "zod";
-import { isSchrijfOperatie, valideerSqlQuery } from "../database/veiligheid";
-import { controleerActueleRol } from "../database/gebruikers";
-import { withDatabase } from "../database/verbinding";
-import { createErrorResponse, createSuccessResponse, formatDatabaseError } from "../utils/antwoorden";
-
-// ── LEES-TOOL (bv. MIN_NIVEAU = 1) ──────────────────────────────────────
-server.tool(
-	"lees_query",
-	"Voert een read-only SQL-query (SELECT) uit op de database en geeft de rijen terug.",
-	{
-		sql: z.string().min(1).describe("De uit te voeren SELECT-query (alleen lezen)"),
-	},
-	async ({ sql: queryTekst }) => {
-		const validatie = valideerSqlQuery(queryTekst);
-		if (!validatie.geldig) return createErrorResponse(validatie.fout ?? "Ongeldige query.");
-		if (isSchrijfOperatie(queryTekst)) {
-			return createErrorResponse("Deze tool voert alleen leesqueries uit. Gebruik de schrijf-tool (indien je rol dat toelaat).");
-		}
-		try {
-			// Idealiter via een read-only rol: neon(env.DATABASE_URL_READONLY)
-			const rijen = await withDatabase(env, async (sql) => sql.query(queryTekst));
-			return createSuccessResponse(`${(rijen as unknown[]).length} rij(en) gevonden.`, rijen);
-		} catch (fout) {
-			return createErrorResponse(formatDatabaseError(fout));
-		}
-	},
-);
-
-// ── SCHRIJF-TOOL (MIN_NIVEAU = MAX_NIVEAU) ──────────────────────────────
-server.tool(
-	"voer_sql_uit",
-	"Voert een SQL-statement uit dat de database mag wijzigen (INSERT, UPDATE, DELETE, ...). Alleen voor het hoogste rolniveau.",
-	{
-		sql: z.string().min(1).describe("Het uit te voeren SQL-statement"),
-	},
-	async ({ sql: queryTekst }) => {
-		// Live her-check: rol kan tijdens de sessie ingetrokken zijn.
-		if (!(await controleerActueleRol(env, props.email, MIN_NIVEAU))) {
-			return createErrorResponse("Je rol is gewijzigd; deze actie is niet meer toegestaan.");
-		}
-		const validatie = valideerSqlQuery(queryTekst);
-		if (!validatie.geldig) return createErrorResponse(validatie.fout ?? "Ongeldige query.");
-		try {
-			const resultaat = await withDatabase(env, async (sql) => sql.query(queryTekst));
-			console.log(`Schrijfoperatie door ${props.email}: ${queryTekst.slice(0, 100)}`);
-			return createSuccessResponse("Statement uitgevoerd.", resultaat);
-		} catch (fout) {
-			return createErrorResponse(formatDatabaseError(fout));
-		}
-	},
-);
-```
-
-> **Weet wat het vangnet wél en niet is:** `valideerSqlQuery` stopt de overduidelijke ongelukken (DROP, TRUNCATE, "WHERE 1=1"-verwijderingen, gestapelde statements). Het stopt géén doordachte aanvallen — daarvoor bestaan de read-only databaserol en de rolniveaus. De Neon HTTP-driver voert bovendien maar één statement per aanroep uit, wat gestapelde injecties sowieso blokkeert.
+- **Typeer het resultaat**: de driver geeft een ruwe union terug (`any[][] | Record<string, any>[] | FullQueryResults`), waar bijvoorbeeld `.length` níét op bestaat. Declareer een rij-type en cast de awaited query — `` (await sql`...`) as KlantRij[] `` — anders loopt `pnpm run type-check` vast.
+- Fouten richting de gebruiker altijd door `formatDatabaseError()` halen (verbergt connection strings en credentials, en vertaalt `permission denied` naar een bruikbare melding).
 
 ## Zod v4 + MCP SDK: valkuilen
 
-- Het parameterschema van `server.tool()` is een **raw shape**: `{ veld: z.string() }` — **géén** `z.object({...})` eromheen.
+Relevant als je aan de bestaande tools sleutelt — nieuwe tools komen er niet bij.
+
+- Registreer tools met **`server.registerTool(naam, config, handler)`**. Het oudere `server.tool()` is in de SDK als *deprecated* gemarkeerd.
+- De `inputSchema` in het config-object is een **raw shape**: `{ veld: z.string() }` — **géén** `z.object({...})` eromheen.
 - Geef **elke** parameter een `.describe("...")` in het Nederlands — dat is wat de AI-client leest.
-- Een tool zonder parameters krijgt `{}` als schema.
-- Tool-namen: snake_case, Nederlands, kort (`zoek_klant`, `maak_offerte`).
+- Een tool zonder parameters laat `inputSchema` gewoon weg (zoals `lijst_tabellen`).
+- Elke tool heeft een `title` én één van `readOnlyHint`/`destructiveHint`. Zonder die hints moet de gebruiker élke aanroep bevestigen, ook die van een leestool.
+
+| Soort tool | Annotatie | Gevolg in de client |
+|---|---|---|
+| Leest alleen | `{ readOnlyHint: true }` | mag draaien zonder bevestiging per aanroep |
+| Wijzigt of verwijdert data | `{ destructiveHint: true }` | vraagt altijd om bevestiging |
+
+> De MCP-specificatie kent ook `idempotentHint` en `openWorldHint`. Die gebruiken we bewust niet (YAGNI).
 
 ## Wat je NIET doet
 
-- ❌ **Geen SSE toevoegen** (geen `serveSSE`, geen `/sse`-route). Streamable HTTP op `/mcp` is het enige transport — dat is een bewuste, harde keuze.
-- ❌ **Geen rolniveau in `Props` stoppen** of uit het token lezen. De rol komt altijd vers uit de database (zie `MyMCP.init`), anders werken rolwijzigingen niet meer door.
-- ❌ **`neon()` niet cachen** op de Durable Object-instantie of in module-scope met state — per aanroep instantiëren via `getDb()`/`withDatabase()`.
+- ❌ **Nooit `DELETE`, `TRUNCATE`, `DROP`, `CREATE` of `ALTER` mogelijk maken** — niet via een `GRANT`, niet door de allowlist in `veiligheid.ts` te verruimen, niet "eenmalig". Moet er iets weg kunnen, dan is het antwoord een soft-delete-veld met een `UPDATE`.
+- ❌ **Geen eigenaarschap** van tabellen bij een MCP-rol, en **geen `CREATE` op het schema**. Beide omzeilen elke `GRANT`.
+- ❌ **Geen vierde tool toevoegen** en **geen vijfde rol**. Harde grenzen — zie `.claude/rules/mcp-rechten.md`. Loop je ertegenaan, stop dan en vraag de eigenaar.
+- ❌ **Geen toolnamen die per rol verschillen.** Beperken doe je via de tabel-allowlist of via `rechten`.
+- ❌ **Geen rechten afdwingen in toolcode** (een lijstje geblokkeerde tabelnamen, een regex over de SQL). Rechten horen in `GRANT`'s.
+- ❌ **Geen `GRANT` op de gebruikers-/rollentabel** aan een MCP-rol.
+- ❌ **Geen `ALTER DEFAULT PRIVILEGES`** voor een MCP-rol — dan krijgt hij automatisch rechten op nieuwe tabellen.
+- ❌ **Geen rechtenwijziging zonder logboekregel** in `.claude/rules/<Bedrijfsapp>_MCP_rules.md`.
+- ❌ **Geen hiërarchische vergelijkingen** (`rol >= n`). Het model kent geen niveaus.
+- ❌ **Geen SSE toevoegen** (geen `serveSSE`, geen `/sse`-route). Streamable HTTP op `/mcp` is het enige transport — een bewuste, harde keuze.
+- ❌ **Geen rolnummer in `Props` stoppen** of uit het token lezen. De rol komt altijd vers uit de database.
+- ❌ **`neon()` niet cachen** op de Durable Object-instantie of in module-scope met state — per aanroep instantiëren via `getRolDb()`/`withRolDatabase()`.
 - ❌ **Geen secrets of connection strings** in code, logs richting de client, foutmeldingen of commits. Volledige fouten mogen wel naar `console.error` (serverlogs).
-- ❌ **`rollen.config.ts` niet omzeilen** met hardcoded niveaus of tabelnamen elders in de code.
-- ❌ **Goedkeurings-HTML niet uitbreiden zonder `sanitizeHtml()`** op alle client-metadata (XSS).
+- ❌ **`rollen.config.ts` niet omzeilen** met hardcoded rolnummers of tabelnamen elders in de code.
+- ❌ **Goedkeurings-HTML niet uitbreiden zonder `sanitizeHtml()`** op alle client-metadata (XSS). De huisstijl zelf is die van de leverancier en blijft ongewijzigd.
 - ❌ **`tools` niet registreren buiten `registreerAlleTools`** om — de registry is de enige aansluitplek.
 - ❌ De `migrations`-sectie in `wrangler.jsonc` niet bewerken; bij het hernoemen van `MyMCP` een nieuwe migratie-tag toevoegen.
 
 ## Taalconventies
 
 - **Alle user-facing tekst is Nederlands**: tool-namen, tool-beschrijvingen, parameterbeschrijvingen, succes- en foutmeldingen, HTML-pagina's, comments, documentatie.
-- **Identifiers**: domeinbegrippen in het Nederlands (`heeftNiveau`, `zoekGebruikerOpEmail`, `registreerKlantTools`), framework-/technische begrippen in het Engels (`Props`, `Env`, `server`, `createSuccessResponse`).
+- **Identifiers**: domeinbegrippen in het Nederlands (`isGeldigeRol`, `zoekGebruikerOpEmail`, `withRolDatabase`), framework-/technische begrippen in het Engels (`Props`, `Env`, `server`, `createSuccessResponse`).
 
 ## Verificatiechecklist na elke wijziging
 
 1. `pnpm run type-check` → schoon.
 2. `pnpm run dev` → start zonder fouten.
 3. `curl http://localhost:8792/.well-known/oauth-authorization-server` → JSON met endpoints.
-4. Met de MCP Inspector (`pnpm dlx @modelcontextprotocol/inspector`, Streamable HTTP, `http://localhost:8792/mcp`): inloggen en controleren dat de toolset klopt voor het rolniveau van de testgebruiker.
-5. Bij nieuwe tools: de tool aanroepen met geldige én ongeldige invoer; foutpad geeft een nette Nederlandse melding via `createErrorResponse`.
+4. Met de MCP Inspector (`pnpm dlx @modelcontextprotocol/inspector`, Streamable HTTP, `http://localhost:8792/mcp`): inloggen en controleren dat het aantal tools klopt (2 bij `lezen`, 3 bij `toevoegen`/`wijzigen`).
+5. `lijst_tabellen` aanroepen → de tabellen komen overeen met de allowlist, en `mag_toevoegen`/`mag_wijzigen` met de `rechten`.
+6. Een query op een tabel buiten de scope → nette melding dat de rol daar geen toegang toe heeft.
+7. `voer_sql_uit` met een `DELETE` → geweigerd met uitleg. Controleer daarna in de Neon-editor als díé rol dat de `DELETE` óók daar op *permission denied* stuit.
+8. Bij een rechtenwijziging: staat de logboekregel in `.claude/rules/<Bedrijfsapp>_MCP_rules.md`?

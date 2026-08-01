@@ -20,6 +20,7 @@
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
 import { zoekGebruikerOpEmail } from "../database/gebruikers";
+import { isGeldigeRol, rolNaam } from "../rollen.config";
 import type { Props } from "../types";
 import { decodeerIdToken, getAuthorizeUrl, wisselCodeIn } from "./entra";
 import { clientIsAlGoedgekeurd, renderGoedkeuringsDialoog, sanitizeHtml, verwerkGoedkeuring } from "./goedkeuring";
@@ -164,11 +165,12 @@ app.get("/callback", async (c) => {
 		return foutPagina(c.req.raw, "Het inloggen bij Microsoft is mislukt. Probeer het opnieuw.", 502);
 	}
 
-	// 3. POORTWACHTER: bestaat deze gebruiker in de database en heeft die
-	//    een actief rolniveau? Zo niet → toegang weigeren.
+	// 3. POORTWACHTER: bestaat deze gebruiker in de database en heeft die een
+	//    geconfigureerde rol? Zo niet → toegang weigeren. isGeldigeRol weigert
+	//    0 en NULL, maar ook een rolnummer dat niet in rollen.config.ts staat.
 	const gebruiker = await zoekGebruikerOpEmail(c.env, identiteit.email);
 	const rol = gebruiker?.mcp_rol ?? 0;
-	if (!gebruiker || rol < 1) {
+	if (!gebruiker || !isGeldigeRol(rol)) {
 		console.warn(`Toegang geweigerd voor ${identiteit.email} (oid: ${identiteit.oid}): niet gevonden of rol ${rol}.`);
 		return foutPagina(
 			c.req.raw,
@@ -194,7 +196,7 @@ app.get("/callback", async (c) => {
 		} satisfies Props,
 	});
 
-	console.log(`Login geslaagd voor ${identiteit.email} (oid: ${identiteit.oid}), rolniveau ${rol}.`);
+	console.log(`Login geslaagd voor ${identiteit.email} (oid: ${identiteit.oid}), rol ${rol} (${rolNaam(rol)}).`);
 	return Response.redirect(redirectTo);
 });
 

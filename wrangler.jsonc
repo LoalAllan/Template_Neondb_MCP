@@ -1,17 +1,26 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Cloudflare Workers-configuratie voor de MCP-server.
 //
-// Wat je hier MOET aanpassen bij het opzetten van een nieuw project:
-//   1. "name"              → kies een unieke naam voor jouw Worker
-//   2. kv_namespaces "id"  → vul het ID in van jouw OAUTH_KV-namespace
+// Wat je hier MOET aanpassen bij het opzetten van een nieuwe klant:
+//   1. "name"              → kies een unieke naam voor de Worker van deze klant
+//   2. "account_id"        → het Cloudflare-account van deze klant
+//   3. kv_namespaces "id"  → vul het ID in van de OAUTH_KV-namespace
 //                            (aanmaken met: pnpm exec wrangler kv namespace create OAUTH_KV)
-// Zie de README, sectie "Stap 4 — Cloudflare instellen".
+// Zie de README, hoofdstuk "Stap 4 — Cloudflare opzetten".
 // ═══════════════════════════════════════════════════════════════════════════
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 
-	// TODO: hernoem naar de naam van jouw project, bv. "crm-mcp-server"
+	// TODO: hernoem naar de naam van dit klantproject, bv. "acme-crm-mcp"
 	"name": "template-neon-db-mcp",
+
+	// TODO: vul het Cloudflare-account-ID van deze klant in.
+	// Vind je in het dashboard onder Workers & Pages → rechterkolom "Account ID".
+	// Verplicht zodra je met meer dan één Cloudflare-account werkt — en dat is
+	// bij een eigen account per klant al snel het geval. Zonder deze regel kiest
+	// wrangler zelf een account, of blijft hij wachten op een keuze (wat een
+	// AI-agent laat hangen).
+	// "account_id": "VERVANG_MIJ_DOOR_HET_ACCOUNT_ID",
 
 	"main": "src/index.ts",
 	"compatibility_date": "2025-03-10",

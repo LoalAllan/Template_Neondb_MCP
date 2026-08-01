@@ -30,6 +30,11 @@ export type Props = {
  */
 export type GebruikerRij = {
 	email: string;
-	/** Rolniveau: 0 of NULL = geen toegang, 1..MAX_NIVEAU = toegang met dat niveau. */
+	/**
+	 * Rolnummer uit de gebruikerstabel. Alleen nummers die als sleutel in
+	 * ROLLEN (rollen.config.ts) voorkomen geven toegang; 0, NULL en onbekende
+	 * nummers worden geweigerd. Het model is niet hiërarchisch: een hoger
+	 * nummer is niet "meer", maar een andere scope.
+	 */
 	mcp_rol: number | null;
 };

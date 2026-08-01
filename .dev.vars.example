@@ -6,8 +6,8 @@
 #   2. Vul de echte waarden in
 #
 # LET OP: `.dev.vars` staat in .gitignore en mag NOOIT gecommit worden.
-# Voor productie zet je dezelfde vijf waarden als Worker-secrets:
-#   pnpm exec wrangler secret put AZURE_CLIENT_ID  (enz. — zie README stap 4)
+# Voor productie zet je dezelfde waarden als Worker-secrets:
+#   pnpm exec wrangler secret put AZURE_CLIENT_ID  (enz. — zie README)
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Application (client) ID van je Azure App Registration
@@ -26,6 +26,32 @@ AZURE_TENANT_ID=00000000-0000-0000-0000-000000000000
 # Genereer met:  openssl rand -hex 32
 COOKIE_ENCRYPTION_KEY=vul-hier-64-hex-tekens-in
 
-# Neon Postgres connection string (met -pooler in de hostnaam aanbevolen)
-# (Neon Console → jouw project → Connection Details)
-DATABASE_URL=postgresql://gebruiker:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+# ═══════════════════════════════════════════════════════════════════════════
+# DATABASE-VERBINDINGEN — LET OP HET VERSCHIL
+# ═══════════════════════════════════════════════════════════════════════════
+
+# 1. AUTH-VERBINDING
+#    Wordt ALLEEN gebruikt om op te zoeken welke rol een gebruiker heeft.
+#    Deze rol heeft SELECT-recht op de gebruikerstabel en verder niets nodig.
+#    Geen enkele MCP-rol krijgt toegang tot deze tabel — anders kan iemand met
+#    schrijfrechten zijn eigen rolniveau ophogen.
+#    (Neon Console → jouw project → Connection Details; pooled string aanbevolen)
+DATABASE_URL=postgresql://mcp_auth:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+
+# 2. ROL-VERBINDINGEN — één per rol uit src/rollen.config.ts
+#    Elke rol is in Neon een eigen Postgres-rol met GRANT's op precies de
+#    tabellen die bij die rol horen. Postgres weigert al de rest; dát is de
+#    echte afscherming, niet de applicatiecode.
+#
+#    DRIE EISEN AAN DEZE ROLLEN (zie README, stap 3b):
+#      - nooit DELETE- of TRUNCATE-recht: er verdwijnt nooit data;
+#      - nooit eigenaar van de tabellen: een eigenaar kan altijd DROP en ALTER,
+#        ongeacht de GRANT's — gebruik dus niet neondb_owner;
+#      - geen CREATE op het schema (REVOKE CREATE ON SCHEMA public).
+#
+#    Zet er zoveel als je rollen hebt (maximaal 4) en laat de rest weg.
+#    De namen moeten overeenkomen met `secretNaam` in src/rollen.config.ts.
+DATABASE_URL_ROL_1=postgresql://mcp_rol1:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL_ROL_2=postgresql://mcp_rol2:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL_ROL_3=postgresql://mcp_rol3:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+# DATABASE_URL_ROL_4=postgresql://mcp_rol4:...

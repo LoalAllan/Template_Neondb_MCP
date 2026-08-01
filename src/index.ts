@@ -14,7 +14,7 @@
  *      ▼
  *   MyMCP (Durable Object, één instantie per MCP-sessie)
  *      │  · init() draait één keer per sessie: verse rol-lookup in Neon
- *      │    en registratie van de tools die bij dat rolniveau horen
+ *      │    en registratie van de tools die bij die rol horen
  *      ▼
  *   Neon Postgres (de database van de onderliggende applicatie)
  * ═══════════════════════════════════════════════════════════════════════════
@@ -25,13 +25,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
 import { EntraHandler } from "./auth/entra-handler";
 import { zoekGebruikerOpEmail } from "./database/gebruikers";
-import { rolNaam } from "./rollen.config";
+import { isGeldigeRol, rolNaam } from "./rollen.config";
 import { registreerAlleTools } from "./tools/register-tools";
 import type { Props } from "./types";
 
 export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
-		name: "Neon CRM MCP-server", // TODO: pas aan naar de naam van jouw applicatie
+		name: "Neon CRM MCP-server", // TODO: pas aan naar de naam van de applicatie van deze klant
 		version: "1.0.0",
 	});
 
@@ -46,6 +46,9 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	 *     eerstvolgende nieuwe sessie, zonder her-login.
 	 *   - Het rolniveau zit bewust NIET in de props: het token blijft
 	 *     geldig, maar de rechten komen altijd vers uit de database.
+	 *
+	 * De rol bepaalt vervolgens op welke database-verbinding de tools van
+	 * deze sessie draaien — en daarmee welke tabellen er überhaupt bestaan.
 	 */
 	async init() {
 		// De props komen uit het versleutelde OAuth-token. Zonder geldige
@@ -58,18 +61,20 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 		const gebruiker = await zoekGebruikerOpEmail(this.env, props.email);
 		const rol = gebruiker?.mcp_rol ?? 0;
 
-		if (!gebruiker || rol < 1) {
-			// De gebruiker is na de token-uitgifte verwijderd of gedeactiveerd.
-			console.warn(`Sessie geweigerd voor ${props.email}: geen actieve rol (meer).`);
+		// isGeldigeRol weigert 0 en NULL, maar óók een getal dat niet als rol
+		// geconfigureerd staat (bv. een 7 die in de klantdatabase is blijven
+		// staan na het opruimen van een rol). Onbekend = geen toegang.
+		if (!gebruiker || !isGeldigeRol(rol)) {
+			console.warn(`Sessie geweigerd voor ${props.email}: rolwaarde ${rol} is niet geconfigureerd.`);
 			throw new Error(
 				"Geen toegang: je account is niet (meer) geactiveerd voor deze MCP-server. " +
 					"Vraag een beheerder om je toegang te activeren in de applicatie.",
 			);
 		}
 
-		console.log(`MCP-sessie gestart: ${props.email} (oid: ${props.oid}), rolniveau ${rol} (${rolNaam(rol)}).`);
+		console.log(`MCP-sessie gestart: ${props.email} (oid: ${props.oid}), rol ${rol} (${rolNaam(rol)}).`);
 
-		// Registreer alleen de tools die bij dit rolniveau horen.
+		// Registreer de tools van déze rol, op de verbinding van déze rol.
 		registreerAlleTools(this.server, this.env, props, rol);
 	}
 }
