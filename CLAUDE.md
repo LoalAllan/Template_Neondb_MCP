@@ -106,7 +106,7 @@ Elke rol krijgt **dezelfde toolnamen**: `lijst_tabellen`, `lees_query` en — zo
 
 1. `src/mcp.config.ts`: `SERVER_NAAM`, `SCHEMA`, `GEBRUIKERS` (tabel + kolomnamen), `NOOIT_SCHRIJVEN`, eventueel `LIMIETEN`.
 2. `src/database/beschermd.ts`: identiteitsdragers van de klant (sessies, tokens, sleutels) aan de `DENYLIST` toevoegen.
-3. `sql/01-mcp-tabellen.sql` in het migratiesysteem van de klant; `sql/02-mcp-neon-rollen.sql` als eigenaar in Neon (tabellijsten invullen); `sql/03-controle.sql` → nul rijen.
+3. De `mcp_*`-tabellen en de gebruikerskolommen in het Drizzle-schema van de klant (`docs/referentie-app/drizzle-schema.ts`), migratie genereren en de `COMMENT ON`-regels uit `sql/01` toevoegen; `sql/02-mcp-neon-rollen.sql` met de **echte** tabelnamen als eigenaar in Neon; `sql/03-controle.sql` → nul rijen. Alles in `sql/` is een sjabloon in het voorbeelddomein: nooit één-op-één draaien.
 4. `pnpm run type-check` en `pnpm test`.
 5. De rest (Azure, Cloudflare, secrets, app-kant) staat in het stappenplan in README.md.
 

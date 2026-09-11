@@ -92,7 +92,7 @@ De volledige redenering staat in [CLAUDE.md](CLAUDE.md) en in de skill (`docs/mc
 - **Node.js 20+** en **pnpm** (`corepack enable pnpm` of `npm install -g pnpm`)
 - Een **Cloudflare-account** voor deze klant (gratis volstaat)
 - Een **Azure-tenant** van de klant waarin je een App Registration mag aanmaken
-- De **Neon-database** van de klantapplicatie, met rechten om rollen aan te maken (de eigenaar)
+- De **Neon-database** van de klantapplicatie, beheerd met **Drizzle** (schema in code, migraties via `drizzle-kit`), met rechten om rollen aan te maken (de eigenaar). De template gaat van Neon + Drizzle uit; een ander migratiesysteem is geen kandidaat zonder overleg met de eigenaar.
 - Een applicatie met een **per-persoon Microsoft-login** en een **gebruikerstabel** (de app-kant bouwt daarop voort; een app met één gedeeld wachtwoord is geen kandidaat — zie de opdracht, §7)
 
 ---
@@ -103,6 +103,7 @@ Werk de vier delen van boven naar beneden af. Deel A levert een werkende, veilig
 
 **Vaste regels, voor alle delen:**
 
+- **Elke database is anders opgebouwd.** Alles in deze template dat een tabel- of kolomnaam bevat — `src/mcp.config.ts`, de drie bestanden in `sql/`, de voorbeelden in `docs/referentie-app/` — is een **sjabloon in het voorbeelddomein van de template** (`klanten`, `projecten`, `facturen`, …). Draai of kopieer het nooit één-op-één. Lees eerst het Drizzle-schema van de klant (`schema.ts`) en de catalogus van de database, en vervang elke naam door wat er werkelijk staat. Een `GRANT` op een tabel die niet bestaat faalt luid; een ontbrekende `GRANT` op een tabel die wél bestaat faalt stil — daarom is de controle achteraf (`sql/03`, `pnpm test`) verplicht.
 - Verzin geen waarden voor secrets, tenant-ID's, account-ID's, KV-ID's of wachtwoorden — vraag ze aan de eigenaar.
 - Voeg geen vierde tool toe, maak `DELETE` nergens mogelijk, en zet nooit zelf rechten in `mcp_rechten`. Iedereen begint dicht.
 - Lees [CLAUDE.md](CLAUDE.md) vóór je code in `mcp-server/` wijzigt, en `docs/mcp-rechten/SKILL.md` vóór je aan rechten, tabellen of `GRANT`'s komt.
@@ -113,14 +114,28 @@ Werk de vier delen van boven naar beneden af. Deel A levert een werkende, veilig
 | # | Actie | Waar | Verificatie |
 |---|---|---|---|
 | A1 | Template plaatsen als `mcp-server/` in de klantrepo, **zonder** `.git`; `pnpm install` (met `--ignore-workspace` als de klantrepo een `pnpm-workspace.yaml` heeft) | [Stap 1](#stap-1--de-template-in-de-klantrepo-plaatsen) | `pnpm run type-check` en `pnpm test` groen |
-| A2 | Fase 0 mini: gebruikerstabel en kolomnamen vaststellen; het schema doorlopen en een voorstel maken voor `NOOIT_SCHRIJVEN` (instellingen, nummerreeksen, wachtrijen, webhooks, wettelijke documenten) en voor identiteitsdragers (sessies, tokens, sleutels); **leg beide voor** aan de eigenaar | de codebase van de klant | bevestigde lijsten |
+| A2 | **Het schema van de klant inventariseren** (zie [Fase 0](#fase-0--het-schema-van-de-klant-lezen-en-indelen) hieronder): gebruikerstabel en kolomnamen vaststellen uit het Drizzle-schema; alle tabellen en views oplijsten; een voorstel maken voor `NOOIT_SCHRIJVEN`, voor identiteitsdragers (denylist) en voor de technische tabellen; **leg alles voor** aan de eigenaar | `schema.ts` van de klant + de catalogus | bevestigde lijsten |
 | A3 | `src/mcp.config.ts` invullen; identiteitsdragers aan `DENYLIST` in `src/database/beschermd.ts` toevoegen | [Stap 2](#stap-2--configureren) | `pnpm run type-check`, `pnpm test` |
-| A4 | `sql/01-mcp-tabellen.sql` opnemen in het migratiesysteem van de klant en draaien | [Stap 3a](#3a-de-tabellen-van-het-rechtenmodel) | tabellen bestaan; niemand heeft een rol |
-| A5 | `sql/02-mcp-neon-rollen.sql` invullen (kopie buiten git!) en als eigenaar draaien in Neon | [Stap 3b](#3b-de-drie-databasegebruikers) | `sql/03-controle.sql`: eerste query geeft nul rijen |
+| A4 | De drie `mcp_*`-tabellen en de drie gebruikerskolommen in het **Drizzle-schema** van de klant zetten (`docs/referentie-app/drizzle-schema.ts`), de migratie genereren, `COMMENT ON`-regels uit `sql/01` erin, en draaien | [Stap 3a](#3a-de-tabellen-van-het-rechtenmodel) | tabellen bestaan; niemand heeft een rol |
+| A5 | `sql/02-mcp-neon-rollen.sql` invullen met de **echte tabelnamen van de klant** (kopie buiten git!) en als eigenaar draaien in Neon | [Stap 3b](#3b-de-drie-databasegebruikers) | `sql/03-controle.sql`: eerste query geeft nul rijen |
 | A6 | Azure App Registration | [Stap 4](#stap-4--azure-app-registration) | client-ID, tenant-ID en client secret in bezit |
 | A7 | Cloudflare-account, account-ID, API-token, KV-namespace, Worker-naam | [Stap 5](#stap-5--cloudflare-opzetten) | `wrangler whoami` toont het juiste account; geen `VERVANG_MIJ` meer in `wrangler.jsonc` |
 | A8 | `.dev.vars` invullen en lokaal testen met de MCP Inspector | [Stap 6](#stap-6--lokaal-ontwikkelen) | een testgebruiker mét rol ziet 2 of 3 tools; zonder rol wordt de login geweigerd |
 | A9 | Secrets in productie, deployen, productie-redirect-URI in Azure | [Stap 7](#stap-7--deployen-en-verbinden) | login werkt via de gedeployde URL |
+
+#### Fase 0 — het schema van de klant lezen en indelen
+
+Dit is de stap die bepaalt of het resultaat bruikbaar wordt, en hij hoort in je **plan** vóór je iets bouwt. Je doet hem één keer, in deel A, en gebruikt de uitkomst in deel B.
+
+1. **Lees het schema, niet alleen de database.** Het Drizzle-schema (`schema.ts`), de migraties in `drizzle/`, de UI-routes, de menu-items en de projectdocumentatie vertellen je hoe de klant over zijn eigen zaak práát. Lijst álle tabellen en views op, met per tabel de kolommen en het commentaar dat de database draagt.
+2. **Sluit uit wat nooit in het scherm hoort.** Twee lijsten, elk met de reden erbij:
+   - **Verzegeld (denylist)** — de gebruikerstabel, `mcp_rollen`, `mcp_rechten`, `mcp_schrijfquota`, en alles waarmee je je een identiteit kunt aanmeten (sessies, tokens, API-sleutels, uitnodigingen, wachtwoordherstel). Nooit leesbaar, nooit toekenbaar; het scherm toont ze alleen als één verzegelde kaart.
+   - **Nooit schrijven** — tabellen waarop de applicatie zelf handelt (instellingen, sjablonen, nummerreeksen, wachtrijen, webhooks, wettelijke documenten). Lezen mag, schrijven nooit.
+   Plus een derde, gewone lijst: **technische tabellen** (migratieboekhouding, logboeken, tellers, voorkeuren) die uit het zicht blijven achter de knop "Machinerie". Bij twijfel: uitsluiten. Erbij zetten is later één regel.
+3. **Deel de rest in clusters in, als iemand die CRM- en ERP-systemen kent.** Niet op naamstam of sleutels, maar op betekenis: "Klanten", "Orders", "Facturen", "Projecten" — één cluster is één beslissing die een beheerder werkelijk kan nemen. Per cluster: een naam zoals de klant hem zelf noemt, één zin uitleg in gewone taal zonder tabelnamen, de tabellen eronder, en waar nodig een concrete waarschuwing ("draagt ook de omzetcijfers per klant"). Vijf tot twaalf clusters; splits waar de toegang uiteenloopt (wat nooit beschrijfbaar is hoort niet bij wat je wél bijwerkt). De volledige redeneerregels staan in `docs/opdracht-app-kant.md`, §8.2.
+4. **Leg het voorstel voor als tabel** — cluster · tabellen · uitleg · voetnoot, plus de drie uitsluitingslijsten — en bouw pas verder als de eigenaar zich in de indeling herkent. Hij kent zijn zaak; jij kent het patroon.
+
+De uitkomst landt op drie plekken: `NOOIT_SCHRIJVEN` en `GEBRUIKERS` in `src/mcp.config.ts`, de identiteitsdragers in `src/database/beschermd.ts`, en (in deel B) de clusterindeling en de technische tabellen in de app.
 
 Na A9 is de server af. Er is nog geen enkel recht toegekend — dat kan pas met het scherm uit deel B, of tijdelijk met de hand (`INSERT INTO mcp_rollen`, `INSERT INTO mcp_rechten`, `UPDATE <gebruikerstabel> SET mcp_rol_id = …`) om te testen.
 
@@ -129,7 +144,7 @@ Na A9 is de server af. Er is nog geen enkel recht toegekend — dat kan pas met 
 | # | Actie | Waar |
 |---|---|---|
 | B1 | Plak `docs/opdracht-app-kant.md` **en** `docs/design-brief-connector.md` samen in één nieuwe sessie van de coding agent, in de codebase van de klant | beide documenten zijn zelfdragend |
-| B2 | Volg de werkwijze uit de opdracht (§15): Fase 0 → clusters en technische tabellen voorstellen en laten bevestigen → beheerderspoort → publiceer-actie met server-side validatie → rol toewijzen aan gebruikers → het scherm → skill en notitie → afrondingscheck | `docs/referentie-app/` bevat de framework-agnostische logica |
+| B2 | Volg de werkwijze uit de opdracht (§15): Fase 0 (de bevestigde clusterindeling en uitsluitingen uit deel A hergebruiken) → beheerderspoort → publiceer-actie met server-side validatie → rol toewijzen aan gebruikers → het scherm → skill en notitie → afrondingscheck | `docs/referentie-app/` bevat de framework-agnostische logica |
 | B3 | Kies in Fase 0 de layoutvariant (A, B of C uit de design-brief) op basis van het designsysteem van de klant en leg de keuze voor vóór je bouwt | `docs/voorbeelden/` |
 
 De server hoeft voor deel B niet aangepast te worden. Wél moet de app-kopie van de beschermde lijsten identiek zijn aan `src/database/beschermd.ts` en `NOOIT_SCHRIJVEN` in `src/mcp.config.ts`.
@@ -219,7 +234,14 @@ Daarna: `pnpm run type-check` en `pnpm test`.
 
 ### 3a. De tabellen van het rechtenmodel
 
-Neem [`sql/01-mcp-tabellen.sql`](sql/01-mcp-tabellen.sql) op als migratie in het migratiesysteem van de klant (Drizzle, Prisma, ruwe SQL — volg wat de klant gebruikt), met `<gebruikerstabel>` ingevuld. Het maakt `mcp_rollen`, `mcp_rechten` en `mcp_schrijfquota` aan en voegt `entra_oid`, `mcp_rol_id` en `is_beheerder` toe aan de gebruikerstabel.
+De klant beheert zijn schema met Drizzle, dus het datamodel komt via Drizzle de database in — niet door `sql/01` los te draaien:
+
+1. Zet de drie tabellen, de enum en de drie extra kolommen op de gebruikerstabel in het Drizzle-schema van de klant. Neem de definities over uit [`docs/referentie-app/drizzle-schema.ts`](docs/referentie-app/drizzle-schema.ts) en pas de naam van de gebruikerstabel en de conventies (bestandsindeling, `relations`) aan aan wat de klant al heeft.
+2. Genereer de migratie (`drizzle-kit generate`, of het `db:generate`-script van de klant) en **controleer de gegenereerde SQL** tegen [`sql/01-mcp-tabellen.sql`](sql/01-mcp-tabellen.sql): dezelfde tabellen, dezelfde kolomnamen, `ON DELETE CASCADE` op de rechten en de quota, `ON DELETE RESTRICT` op `mcp_rol_id`, de unieke index op (`rol_id`, `tabelnaam`).
+3. Voeg de `COMMENT ON`-regels uit `sql/01` met de hand toe aan de gegenereerde migratie (Drizzle genereert die niet), met `<gebruikerstabel>` vervangen.
+4. Draai de migratie zoals de klant dat doet (`db:migrate`).
+
+`sql/01` is dus de **referentie** voor wat de migratie moet opleveren, geen script om te draaien. Het maakt `mcp_rollen`, `mcp_rechten` en `mcp_schrijfquota` aan en voegt `entra_oid`, `mcp_rol_id` en `is_beheerder` toe aan de gebruikerstabel.
 
 Er komt **geen enkel recht** mee: iedereen begint dicht. Meld dat aan de eigenaar vóór je de migratie draait — tot het scherm er is (deel B), werkt de MCP-toegang niet, en dat is de bedoeling.
 
@@ -228,6 +250,8 @@ Had de applicatie al een ouder rechtenveld voor MCP-toegang (een `mcp_rol`-numme
 ### 3b. De drie databasegebruikers
 
 Maak een kopie van [`sql/02-mcp-neon-rollen.sql`](sql/02-mcp-neon-rollen.sql) **buiten de repo**, vul de placeholders en de drie wachtwoorden in, en draai hem als eigenaar in de Neon SQL Editor. Gooi de kopie daarna weg.
+
+⚠️ **De tabellijsten in §3 en §4 van dat bestand zijn een voorbeeld, niet de waarheid.** Ze noemen tabellen uit het voorbeelddomein van de template die bij de klant niet bestaan. Vervang ze door de echte tabelnamen uit Fase 0: elke bedrijfstabel en view die ooit gelezen mag worden bij de lezer, elke bedrijfstabel waarop ooit geschreven mag worden bij de schrijver — en géén van de verzegelde of "nooit schrijven"-tabellen. Controleer daarna met `sql/03` én met `MCP_TEST_BRANCH=1 pnpm test` op een testbranch, want een vergeten `GRANT` geeft geen foutmelding bij het draaien.
 
 Wat het doet: drie kale rollen (`mcp_lezer`, `mcp_schrijver`, `mcp_service`) zonder eigenaarschap en zonder `CREATE`; `search_path`, `statement_timeout` en read-only op de rol; `SELECT` per tabel aan de lezer, `SELECT/INSERT/UPDATE` per tabel aan de schrijver; en aan de service alleen wat hij nodig heeft: de rechten lezen, de `oid` binden, de teller bijwerken.
 

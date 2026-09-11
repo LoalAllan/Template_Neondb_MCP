@@ -3,11 +3,14 @@
 Deze map bevat de **logica** van het rechtenscherm die in elk framework en in elke layoutvariant
 hetzelfde is, als referentie voor de agent die `docs/opdracht-app-kant.md` uitvoert. Het is
 **geen drop-in code**: de bestanden komen uit een werkende Next.js/Drizzle-implementatie en zijn
+geschreven in het **voorbeelddomein** van de template (`klanten`, `projecten`, …). Elke tabelnaam
+erin is een placeholder; lees het Drizzle-schema van de klant en vervang ze. De bestanden zijn
 ontdaan van merknamen en framework-imports, maar je herschrijft ze in de conventies van de
 codebase van de klant (ORM, server-acties of endpoints, UI-kit).
 
 | Bestand | Wat het is | Wat vast moet blijven |
 |---|---|---|
+| `drizzle-schema.ts` | de Drizzle-definities van `mcp_rollen`, `mcp_rechten`, `mcp_schrijfquota`, de enum en de drie gebruikerskolommen | de tabel- en kolomnamen; de `ON DELETE`-regels; de unieke index |
 | `mcp-beschermd.ts` | de app-kopie van de beschermde lijsten + de lijst technische tabellen | identiek aan `mcp-server/src/database/beschermd.ts` en `NOOIT_SCHRIJVEN` in `mcp-server/src/mcp.config.ts` |
 | `mcp-standen.ts` | de drie standen, hun tekens en uitlegzinnen, en `clusterStand()` | de woorden en tekens: Geen toegang `—` · Lezen `◦` · Schrijven `●` · Gedeeltelijk `◐` |
 | `mcp-clusters.ts` | het clustertype, een voorbeeldindeling, `bouwPlattegrond()`, `bundelMachinerie()`, de dev-asserts | het vangnet "Nog niet ingedeeld"; één tabel in precies één cluster |

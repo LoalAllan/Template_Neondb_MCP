@@ -195,8 +195,12 @@ vanuit.**
    `updated_at`)? Dit **moet** overeenkomen met `GEBRUIKERS` in `mcp-server/src/mcp.config.ts`.
    Klopt dat niet, corrigeer dan eerst de config en draai `pnpm test` in `mcp-server/`. Welk
    rechtenveld bestaat er vandaag al, zodat je weet wat je migreert?
-4. **Hoe werken migraties** in dit project, en wat is de afgesproken werkwijze bij een
-   schemawijziging? Volg die exact. De migratie uit §4 en de `GRANT`'s horen daarin thuis.
+4. **Hoe werken migraties** in dit project? De codebase gebruikt Drizzle: vind het schema
+   (`schema.ts`), de map met migraties (`drizzle/`), de scripts (`db:generate`, `db:migrate`) en de
+   afgesproken werkwijze bij een schemawijziging. Volg die exact. De migratie uit §4 en de
+   `GRANT`'s horen daarin thuis. Lees het schema volledig: dat is je bron voor elke tabel- en
+   kolomnaam in deze opdracht — niets uit de sjablonen in `mcp-server/sql/` klopt zonder die
+   controle.
 5. **Welke design-tokens en UI-bouwstenen bestaan er al?** Kleuren, radii, motion-tokens, knoppen,
    kaarten, dialogen, schakelaars, tabellen, lege staten, en of er al een canvas- of graaf-primitive
    is. Je hergebruikt deze; je introduceert geen nieuwe merkkleuren en geen nieuwe primitives als
@@ -233,11 +237,26 @@ expliciet: wat je aantrof aan bestaande veiligheidsgaranties, en welke daarvan j
 
 ## 4. De migratie
 
-Het datamodel is ontworpen en staat klaar in `mcp-server/sql/01-mcp-tabellen.sql`. Jij neemt het op
-in het migratiesysteem van deze codebase (Drizzle, Prisma, Knex, ruwe SQL — wat de klant gebruikt),
-in de stijl van de klant, met `<gebruikerstabel>` ingevuld. Namen mag je aan de conventies van de
-codebase aanpassen **behalve** de tabelnamen `mcp_rollen`, `mcp_rechten`, `mcp_schrijfquota` en de
-kolommen `entra_oid`, `mcp_rol_id`, `is_beheerder`: die kent de MCP-server letterlijk.
+Het datamodel is ontworpen en staat als referentie in `mcp-server/sql/01-mcp-tabellen.sql`. Deze
+codebase beheert haar schema met **Drizzle**, dus zo komt het erin — niet door dat bestand los te
+draaien:
+
+1. Zet de drie tabellen, de enum `mcp_recht_niveau` en de drie kolommen op de gebruikerstabel in het
+   Drizzle-schema van deze codebase, in haar eigen conventies (bestandsindeling, `relations`,
+   naamgeving van indexen). Neem de vorm over uit `mcp-server/docs/referentie-app/drizzle-schema.ts`.
+2. Genereer de migratie zoals deze codebase dat doet (`drizzle-kit generate`), en **vergelijk de
+   gegenereerde SQL met `sql/01`**: dezelfde tabellen en kolommen, `ON DELETE CASCADE` op
+   `mcp_rechten.rol_id` en `mcp_schrijfquota.rol_id`, `ON DELETE RESTRICT` op `mcp_rol_id`, de
+   unieke index op (`rol_id`, `tabelnaam`), `entra_oid` uniek.
+3. Voeg de `COMMENT ON`-regels uit `sql/01` met de hand toe aan de gegenereerde migratie; Drizzle
+   genereert die niet, en de server en het scherm tonen dat commentaar.
+4. Draai de migratie zoals altijd (`db:migrate`), als de eigenaar van de database.
+
+Namen mag je aan de conventies van de codebase aanpassen **behalve** de tabelnamen `mcp_rollen`,
+`mcp_rechten`, `mcp_schrijfquota`, de enum `mcp_recht_niveau` en de kolommen `entra_oid`,
+`mcp_rol_id`, `is_beheerder`: die kent de MCP-server letterlijk. Alles wat in `sql/` naar
+tabellen van het voorbeelddomein verwijst (`klanten`, `projecten`, …) is een sjabloon en moet
+vervangen worden door de echte namen uit Fase 0.
 
 Wat het model betekent — lees dit, want elke regel eronder is een beveiligingsbeslissing:
 

@@ -1,13 +1,22 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 01 — De tabellen van het MCP-rechtenmodel (migratiesjabloon)
 --
--- Neem dit op in het migratiesysteem van de applicatie van de klant (Drizzle,
--- Prisma, Knex, ruwe SQL, …) als één migratie, in de stijl die de klant
--- gebruikt. Draai het als de EIGENAAR van de database (de rol waarmee de
--- migraties altijd draaien), NIET als een van de MCP-gebruikers.
+-- ⚠ DIT IS EEN REFERENTIE, GEEN SCRIPT OM LOS TE DRAAIEN.
+--
+-- De klant beheert zijn schema met Drizzle. Zet de tabellen, de enum en de
+-- drie gebruikerskolommen in het Drizzle-schema van de klant (zie
+-- docs/referentie-app/drizzle-schema.ts), genereer de migratie met drizzle-kit,
+-- en vergelijk de gegenereerde SQL met wat hieronder staat: dezelfde tabellen,
+-- kolommen, ON DELETE-regels en de unieke index. Voeg daarna de COMMENT
+-- ON-regels hieronder met de hand toe aan de gegenereerde migratie — Drizzle
+-- genereert die niet. Draai de migratie zoals de klant dat altijd doet, als de
+-- EIGENAAR van de database, nooit als een van de MCP-gebruikers.
 --
 -- Vervang <gebruikerstabel> door de naam van de bestaande gebruikerstabel van
 -- de applicatie (dezelfde naam als GEBRUIKERS.tabel in src/mcp.config.ts).
+-- Heeft die tabel al een kolom die zo heet, of een ander rechtenveld voor
+-- MCP-toegang, dan is dat een beslissing voor de eigenaar — niet stilzwijgend
+-- hernoemen.
 --
 -- WAT DIT DOET
 --   • mcp_rollen        — een rol is een benoemde verzameling tabelrechten

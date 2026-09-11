@@ -90,6 +90,29 @@ Tabellen vallen in vier groepen. De namen staan in de code, kopieer ze niet:
 `<pad naar de app-kopie van de beschermde lijsten>` is de app-kant-kopie van de denylist en
 `NOOIT_SCHRIJVEN`; houd beide identiek aan de server.
 
+### De clusterindeling — hoe je die opstelt en bijhoudt
+
+Het rechtenscherm toont geen tabellen maar **clusters**: groepen tabellen met een naam zoals de
+eigenaar ze zelf noemt (Klanten, Orders, Facturen, Projecten), één zin uitleg in gewone taal en de
+tabellen eronder. De indeling is een redactionele laag in de broncode (`<pad naar de
+clusterindeling>`), voorgesteld door de agent en bevestigd door de eigenaar. De opslag blijft per
+tabel; een cluster is bediening, nooit de waarheid.
+
+Stel je een indeling op of breid je hem uit, denk dan als iemand die CRM- en ERP-systemen kent:
+
+1. noem het cluster zoals de gebruiker het noemt — nooit een tabelnaam of technische term;
+2. één cluster = één beslissing die een beheerder werkelijk kan nemen;
+3. splits waar de toegang uiteenloopt (wat nooit beschrijfbaar is hoort niet bij wat je wél bijwerkt);
+4. houd bij elkaar wat altijd samen gelezen wordt (regels bij een order);
+5. mik op vijf tot twaalf clusters;
+6. schrijf per cluster één zin uitleg zonder tabelnamen — lukt dat niet, dan is het geen cluster;
+7. zet een concrete waarschuwing bij wat de beheerder niet verwacht (omzetcijfers in de klantentabel).
+
+Buiten de clusters vallen: de **verzegelde** tabellen (denylist — nooit toekenbaar, alleen als
+naam zichtbaar), de **technische** tabellen (machinerie, achter één knop), en wat nog nergens is
+ingedeeld ("Nog niet ingedeeld", zichtbaar en dicht). Leg elk voorstel voor als tabel — cluster ·
+tabellen · uitleg · voetnoot — en bouw pas verder na bevestiging.
+
 ## 4. Welke baan
 
 | Wat er wijzigt | Baan |
@@ -128,9 +151,11 @@ GRANT SELECT ON <tabel> TO mcp_lezer;
 GRANT SELECT, INSERT, UPDATE ON <tabel> TO mcp_schrijver;  -- als schrijven ooit mag
 ```
 
-Dit is baan A: je verruimt niets aan de poort. Werk in dezelfde wijziging
-`mcp-server/sql/02-mcp-neon-rollen.sql` bij (moet een database vanaf nul kunnen opbouwen) en draai
-de controlequery in `mcp-server/sql/03-controle.sql`: nul rijen.
+Dit is baan A: je verruimt niets aan de poort. Zet de regels in de door Drizzle gegenereerde
+migratie, onder de `COMMENT ON`-regels, met de **echte** tabelnaam. Werk in dezelfde wijziging
+`mcp-server/sql/02-mcp-neon-rollen.sql` bij (moet een database vanaf nul kunnen opbouwen; de
+tabellijsten daarin zijn van deze klant, niet het voorbeelddomein van de template) en draai de
+controlequery in `mcp-server/sql/03-controle.sql`: nul rijen.
 
 **Drie gevallen waarin je juist níéts grant.** De eerste twee horen bovendien op een beschermde
 lijst, want gesloten zijn is niet genoeg: een tabel die nergens op staat, is één klik van openstaan.

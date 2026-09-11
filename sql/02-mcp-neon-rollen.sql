@@ -19,6 +19,14 @@
 -- Die tweede dimensie is wat de belofte "hier kan niets verdwijnen" overeind
 -- houdt, ook als de queryanalyse in de Worker ooit een gat blijkt te hebben.
 --
+-- ⚠ DIT IS EEN SJABLOON. De tabellijsten in §3 en §4 komen uit het
+--   voorbeelddomein van de template (klanten, projecten, facturen, …) en
+--   bestaan bij de klant NIET. Draai dit bestand nooit één-op-één: lees eerst
+--   het Drizzle-schema en de catalogus van de klant, en vervang elke tabelnaam
+--   door wat er werkelijk staat. Een GRANT op een onbestaande tabel faalt
+--   luid; een vergeten GRANT op een bestaande tabel faalt stil — controleer
+--   daarom achteraf met 03-controle.sql én MCP_TEST_BRANCH=1 pnpm test.
+--
 -- VOORAF — VUL IN:
 --   <database>        de databasenaam (in Neon meestal `neondb`)
 --   <gebruikerstabel> de gebruikerstabel van de applicatie (= GEBRUIKERS.tabel
