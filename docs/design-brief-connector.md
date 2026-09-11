@@ -633,7 +633,7 @@ de "Ongedaan maken"-knop uit §1.6, met een redo erbij), nooit op posities — d
 
 **Verbindingen:** één per cluster, vanuit de onderrand van de rolknoop naar de bovenrand van de
 clusterknoop, als Bézier met loodrechte raaklijnen (dezelfde meetkunde als variant A, bijlage A
-§6.1). Kleur en lijnstijl = stand. **Let op: in het referentiebeeld zijn de lijnen gekleurd naar het
+A.3.1). Kleur en lijnstijl = stand. **Let op: in het referentiebeeld zijn de lijnen gekleurd naar het
 icoon van het cluster (groen, rood, blauw, grijs, teal). Dat is fout — de drieklank geldt.** De
 tellers in de knoop zijn wél terecht: `2 —  1 ◦  0 ●` leest in één blik wat "gedeeltelijk" betekent.
 
