@@ -98,7 +98,7 @@ describe("§6 — omzeilingen", () => {
 	it("dezelfde tabel in een andere schrijfwijze", async () => {
 		await toegestaan("SELECT id FROM public.klanten");
 		// Bequoteerd met hoofdletters is niet ondubbelzinnig te herleiden.
-		await geweigerd('SELECT id FROM "Companies"');
+		await geweigerd('SELECT id FROM "Klanten"');
 	});
 
 	it("systeemcatalogi", async () => {

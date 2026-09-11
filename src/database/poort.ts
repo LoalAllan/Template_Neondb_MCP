@@ -122,7 +122,7 @@ async function toetsRelaties(
 	 * hoofdniveau NIET, en `public.tabel` leest sowieso altijd de echte tabel.
 	 * Wie CTE-namen globaal uit de relatielijst schrapt, laat daarmee
 	 *
-	 *     SELECT * FROM transactions, companies
+	 *     SELECT * FROM transacties, klanten
 	 *      WHERE id IN (SELECT x FROM (WITH transactions AS (SELECT 1 AS x) SELECT x FROM transactions) q)
 	 *
 	 * ongezien passeren — de rol leest dan elke tabel die de gedeelde

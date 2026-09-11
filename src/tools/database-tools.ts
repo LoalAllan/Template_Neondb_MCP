@@ -279,8 +279,8 @@ export function registreerDatabaseTools(
 				 * arrayMode, om dezelfde reden als bij schrijven: de driver bouwt
 				 * zijn rij-objecten met "laatste wint", dus bij dubbele
 				 * kolomnamen verdwijnen waarden stilzwijgend. En dubbele namen
-				 * zijn hier volstrekt normaal — `SELECT c.*, ct.* FROM companies c
-				 * JOIN contacts ct` levert twee keer id, email, phone, note,
+				 * zijn hier volstrekt normaal — `SELECT k.*, c.* FROM klanten k
+				 * JOIN contactpersonen c` levert twee keer id, email, telefoon, notitie,
 				 * created_at en updated_at. De query slaagt dan, maar het antwoord
 				 * klopt niet, en niemand merkt het.
 				 */

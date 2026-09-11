@@ -6,7 +6,7 @@
 //   2. "account_id"        → het Cloudflare-account van deze klant
 //   3. kv_namespaces "id"  → vul het ID in van de OAUTH_KV-namespace
 //                            (aanmaken met: pnpm exec wrangler kv namespace create OAUTH_KV)
-// Zie de README, hoofdstuk "Stap 4 — Cloudflare opzetten".
+// Zie de README, hoofdstuk "Stap 5 — Cloudflare opzetten".
 // ═══════════════════════════════════════════════════════════════════════════
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
@@ -51,7 +51,7 @@
 	"kv_namespaces": [
 		{
 			"binding": "OAUTH_KV",
-			// TODO: vervang door het echte KV-namespace-ID (zie README stap 4).
+			// TODO: vervang door het echte KV-namespace-ID (zie README stap 5e).
 			// Voor lokaal ontwikkelen (wrangler dev) mag deze placeholder blijven staan.
 			"id": "VERVANG_MIJ_DOOR_JOUW_KV_NAMESPACE_ID"
 		}
