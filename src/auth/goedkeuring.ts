@@ -25,6 +25,19 @@ const COOKIE_MAX_AGE_SECONDEN = 60 * 60 * 24 * 30; // 30 dagen
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function importeerHmacSleutel(secret: string): Promise<CryptoKey> {
+	/*
+	 * ⚠ Een ontbrekende sleutel is hier geen randgeval maar een gat.
+	 * `new TextEncoder().encode(undefined)` codeert de LETTERLIJKE string
+	 * "undefined" — een publiek bekende sleutel — en dan is de
+	 * goedkeurings-cookie te vervalsen en de dialoog over te slaan. Er gaat
+	 * niets stuk, dus niemand merkt het.
+	 *
+	 * De configuratiecontrole in database/verbinding.ts dekt dit pas bij de
+	 * eerste databasecall; deze sleutel wordt eerder gebruikt, op /authorize.
+	 */
+	if (typeof secret !== "string" || secret.trim() === "") {
+		throw new Error("De MCP-server is niet volledig geconfigureerd (COOKIE_ENCRYPTION_KEY ontbreekt).");
+	}
 	return crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
 		"sign",
 		"verify",

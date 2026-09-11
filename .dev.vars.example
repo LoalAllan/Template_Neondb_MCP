@@ -7,51 +7,51 @@
 #
 # LET OP: `.dev.vars` staat in .gitignore en mag NOOIT gecommit worden.
 # Voor productie zet je dezelfde waarden als Worker-secrets:
-#   pnpm exec wrangler secret put AZURE_CLIENT_ID  (enz. — zie README)
+#   pnpm exec wrangler secret put <NAAM>   (zie README, deel A)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Application (client) ID van je Azure App Registration
-# (Azure Portal → App registrations → jouw app → Overview)
+# ── Microsoft Entra ID (single-tenant App Registration) ────────────────────
+# Azure Portal → App registrations → jouw app → Overview
 AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000000
-
-# Client secret van je Azure App Registration
-# (Azure Portal → App registrations → jouw app → Certificates & secrets)
+# Azure Portal → App registrations → jouw app → Certificates & secrets
 AZURE_CLIENT_SECRET=vul-hier-je-client-secret-in
-
-# Directory (tenant) ID van je Azure-tenant (single-tenant!)
-# (Azure Portal → App registrations → jouw app → Overview)
+# Directory (tenant) ID van de Azure-tenant (single-tenant!)
 AZURE_TENANT_ID=00000000-0000-0000-0000-000000000000
 
-# Willekeurige sleutel voor het ondertekenen van goedkeurings-cookies.
-# Genereer met:  openssl rand -hex 32
+# Sleutel voor het ondertekenen van de goedkeurings-cookie.
+# Genereer met: openssl rand -hex 32
 COOKIE_ENCRYPTION_KEY=vul-hier-64-hex-tekens-in
 
 # ═══════════════════════════════════════════════════════════════════════════
-# DATABASE-VERBINDINGEN — LET OP HET VERSCHIL
+# DE DRIE MCP-DATABASEVERBINDINGEN
 # ═══════════════════════════════════════════════════════════════════════════
-
-# 1. AUTH-VERBINDING
-#    Wordt ALLEEN gebruikt om op te zoeken welke rol een gebruiker heeft.
-#    Deze rol heeft SELECT-recht op de gebruikerstabel en verder niets nodig.
-#    Geen enkele MCP-rol krijgt toegang tot deze tabel — anders kan iemand met
-#    schrijfrechten zijn eigen rolniveau ophogen.
-#    (Neon Console → jouw project → Connection Details; pooled string aanbevolen)
-DATABASE_URL=postgresql://mcp_auth:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
-
-# 2. ROL-VERBINDINGEN — één per rol uit src/rollen.config.ts
-#    Elke rol is in Neon een eigen Postgres-rol met GRANT's op precies de
-#    tabellen die bij die rol horen. Postgres weigert al de rest; dát is de
-#    echte afscherming, niet de applicatiecode.
 #
-#    DRIE EISEN AAN DEZE ROLLEN (zie README, stap 3b):
-#      - nooit DELETE- of TRUNCATE-recht: er verdwijnt nooit data;
-#      - nooit eigenaar van de tabellen: een eigenaar kan altijd DROP en ALTER,
-#        ongeacht de GRANT's — gebruik dus niet neondb_owner;
-#      - geen CREATE op het schema (REVOKE CREATE ON SCHEMA public).
+# ⚠ Ontbreekt er één, dan WEIGERT de server élke tool-aanroep. Dat is opzet:
+#   er is bewust geen terugval op een ruimere verbinding, want dat is de
+#   klassieke fail-open — de beveiliging verdwijnt zonder dat er iets stukgaat.
 #
-#    Zet er zoveel als je rollen hebt (maximaal 4) en laat de rest weg.
-#    De namen moeten overeenkomen met `secretNaam` in src/rollen.config.ts.
-DATABASE_URL_ROL_1=postgresql://mcp_rol1:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
-DATABASE_URL_ROL_2=postgresql://mcp_rol2:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
-DATABASE_URL_ROL_3=postgresql://mcp_rol3:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
-# DATABASE_URL_ROL_4=postgresql://mcp_rol4:...
+# De volledige gebruiker (de eigenaar van de database) hoort hier NIET: die is
+# van de migraties en de applicatie van de klant, en wordt door geen enkele
+# MCP-tool gebruikt.
+#
+# Aanmaken: draai sql/02-mcp-neon-rollen.sql als eigenaar in de Neon-console.
+# Gebruik de POOLED host (-pooler) en een alfanumeriek wachtwoord (scheelt
+# URL-encoding).
+
+# Rol `mcp_lezer` — uitsluitend SELECT, draait read-only.
+DATABASE_URL_LEZER=postgresql://mcp_lezer:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+
+# Rol `mcp_schrijver` — SELECT, INSERT en UPDATE. Nooit DELETE, nooit DDL.
+DATABASE_URL_SCHRIJVER=postgresql://mcp_schrijver:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+
+# Rol `mcp_service` — leest de rechten, bindt de Entra-oid, werkt de
+# schrijfteller bij. Meer niet; hier draait nooit een aangeleverde query op.
+DATABASE_URL_SERVICE=postgresql://mcp_service:wachtwoord@ep-xxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require
+
+# ── Alleen voor de databasetests ───────────────────────────────────────────
+# Zet dit op 1 om test/privileges.db.test.ts te activeren. Doe dat UITSLUITEND
+# tegen een Neon-testbranch: die tests schrijven en tellen.
+# MCP_TEST_BRANCH=1
+# De eigenaar van de TESTBRANCH (nooit productie): alleen voor het begrenzingenblok,
+# dat een tijdelijke rol aanmaakt en weer opruimt.
+# MCP_TEST_EIGENAAR_URL=

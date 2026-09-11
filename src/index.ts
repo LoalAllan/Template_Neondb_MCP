@@ -24,14 +24,15 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
 import { EntraHandler } from "./auth/entra-handler";
-import { zoekGebruikerOpEmail } from "./database/gebruikers";
-import { isGeldigeRol, rolNaam } from "./rollen.config";
+import { leesRolContext } from "./database/rechten";
+import { controleerConfiguratie } from "./database/verbinding";
+import { SERVER_NAAM } from "./mcp.config";
 import { registreerAlleTools } from "./tools/register-tools";
 import type { Props } from "./types";
 
 export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
-		name: "Neon CRM MCP-server", // TODO: pas aan naar de naam van de applicatie van deze klant
+		name: SERVER_NAAM,
 		version: "1.0.0",
 	});
 
@@ -41,14 +42,11 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	 * ROL-TIMING (bewust ontwerp):
 	 *   - Bij de OAuth-login (/callback) fungeert de rol-check als
 	 *     poortwachter: onbekende gebruikers krijgen geen token.
-	 *   - Hier in init() zoeken we de rol OPNIEUW op. Zo werkt een
-	 *     rolwijziging in de UI van de applicatie door bij de
-	 *     eerstvolgende nieuwe sessie, zonder her-login.
-	 *   - Het rolniveau zit bewust NIET in de props: het token blijft
-	 *     geldig, maar de rechten komen altijd vers uit de database.
-	 *
-	 * De rol bepaalt vervolgens op welke database-verbinding de tools van
-	 * deze sessie draaien — en daarmee welke tabellen er überhaupt bestaan.
+	 *   - Hier lezen we de rechten opnieuw, om de TOOLBESCHRIJVINGEN te
+	 *     kunnen vullen met de tabellen die deze rol mag benaderen.
+	 *   - Die context is NOOIT de beveiliging. Elke tool-aanroep leest de
+	 *     rechten daarna opnieuw vers (database/rechten.ts), zodat een
+	 *     ingetrokken recht ook midden in een lopende sessie meteen geldt.
 	 */
 	async init() {
 		// De props komen uit het versleutelde OAuth-token. Zonder geldige
@@ -58,24 +56,28 @@ export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 			throw new Error("Geen toegang: deze sessie bevat geen geldige identiteit. Log opnieuw in.");
 		}
 
-		const gebruiker = await zoekGebruikerOpEmail(this.env, props.email);
-		const rol = gebruiker?.mcp_rol ?? 0;
+		// Een Worker kent geen startmoment, dus de configuratiecontrole draait
+		// hier én bij elke verbinding. Ontbreekt er een secret, dan weigert de
+		// server dienst — hij valt nooit terug op een ruimere verbinding.
+		controleerConfiguratie(this.env);
 
-		// isGeldigeRol weigert 0 en NULL, maar óók een getal dat niet als rol
-		// geconfigureerd staat (bv. een 7 die in de klantdatabase is blijven
-		// staan na het opruimen van een rol). Onbekend = geen toegang.
-		if (!gebruiker || !isGeldigeRol(rol)) {
-			console.warn(`Sessie geweigerd voor ${props.email}: rolwaarde ${rol} is niet geconfigureerd.`);
+		const context = await leesRolContext(this.env, props.oid, props.email);
+		if (!context) {
+			// De gebruiker is na de token-uitgifte verwijderd, of zijn rol is
+			// ingetrokken.
+			console.warn(`Sessie geweigerd voor ${props.email}: geen actieve rol (meer).`);
 			throw new Error(
 				"Geen toegang: je account is niet (meer) geactiveerd voor deze MCP-server. " +
-					"Vraag een beheerder om je toegang te activeren in de applicatie.",
+					"Vraag een beheerder om je een rol te geven in de applicatie.",
 			);
 		}
 
-		console.log(`MCP-sessie gestart: ${props.email} (oid: ${props.oid}), rol ${rol} (${rolNaam(rol)}).`);
+		console.log(
+			`MCP-sessie gestart: ${props.email} (oid: ${props.oid}), rol "${context.rolNaam}" ` +
+				`met ${context.rechten.size} tabelrecht(en).`,
+		);
 
-		// Registreer de tools van déze rol, op de verbinding van déze rol.
-		registreerAlleTools(this.server, this.env, props, rol);
+		registreerAlleTools(this.server, this.env, props, context);
 	}
 }
 

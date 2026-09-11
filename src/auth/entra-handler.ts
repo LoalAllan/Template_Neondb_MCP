@@ -19,14 +19,13 @@
 
 import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provider";
 import { Hono } from "hono";
-import { zoekGebruikerOpEmail } from "../database/gebruikers";
-import { isGeldigeRol, rolNaam } from "../rollen.config";
+import { leesRolContext } from "../database/rechten";
+import { SERVER_NAAM } from "../mcp.config";
 import type { Props } from "../types";
 import { decodeerIdToken, getAuthorizeUrl, wisselCodeIn } from "./entra";
 import { clientIsAlGoedgekeurd, renderGoedkeuringsDialoog, sanitizeHtml, verwerkGoedkeuring } from "./goedkeuring";
 
 /** Naam van de server zoals getoond in de goedkeuringsdialoog. */
-const SERVER_NAAM = "Memoran connector MCP";
 
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
@@ -65,39 +64,28 @@ app.get("/authorize", async (c) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// POST /authorize — de gebruiker heeft de dialoog goedgekeurd of geweigerd
+// POST /authorize — de gebruiker heeft de dialoog goedgekeurd of geannuleerd
 // ═══════════════════════════════════════════════════════════════════════════
 app.post("/authorize", async (c) => {
 	try {
 		const { state, actie, headers } = await verwerkGoedkeuring(c.req.raw, c.env.COOKIE_ENCRYPTION_KEY);
+		const oauthReqInfo = state.oauthReqInfo as AuthRequest;
+
+		// Annuleren: terug naar de MCP-client met de standaard OAuth-weigering.
 		if (actie === "weigeren") {
-			return weigerToegang(state.oauthReqInfo);
+			const terug = new URL(oauthReqInfo.redirectUri);
+			terug.searchParams.set("error", "access_denied");
+			terug.searchParams.set("error_description", "De gebruiker heeft de toegang geweigerd.");
+			if (oauthReqInfo.state) terug.searchParams.set("state", oauthReqInfo.state);
+			return c.redirect(terug.href, 302);
 		}
-		return redirectNaarEntra(c.req.raw, state.oauthReqInfo, c.env, headers);
+
+		return redirectNaarEntra(c.req.raw, oauthReqInfo, c.env, headers);
 	} catch (fout) {
 		console.error("Fout bij het verwerken van de goedkeuring:", fout);
 		return c.text("De goedkeuring kon niet worden verwerkt. Start het inloggen opnieuw.", 400);
 	}
 });
-
-/**
- * De gebruiker klikte "Annuleren": stuur de browser terug naar de redirect-URI
- * van de MCP-client met de OAuth-standaardfout `access_denied`, zodat de
- * client zelf netjes kan tonen dat de toegang geweigerd is.
- */
-function weigerToegang(oauthReqInfo: Record<string, any>): Response {
-	const redirectUri: unknown = oauthReqInfo?.redirectUri;
-	if (typeof redirectUri !== "string" || !redirectUri) {
-		throw new Error("De OAuth-aanvraag bevat geen redirect-URI om de weigering aan te melden.");
-	}
-	const url = new URL(redirectUri);
-	url.searchParams.set("error", "access_denied");
-	url.searchParams.set("error_description", "De gebruiker heeft de toegang geweigerd.");
-	if (typeof oauthReqInfo.state === "string" && oauthReqInfo.state) {
-		url.searchParams.set("state", oauthReqInfo.state);
-	}
-	return Response.redirect(url.href, 302);
-}
 
 /**
  * Stuurt de browser door naar het Entra ID login-scherm.
@@ -165,13 +153,18 @@ app.get("/callback", async (c) => {
 		return foutPagina(c.req.raw, "Het inloggen bij Microsoft is mislukt. Probeer het opnieuw.", 502);
 	}
 
-	// 3. POORTWACHTER: bestaat deze gebruiker in de database en heeft die een
-	//    geconfigureerde rol? Zo niet → toegang weigeren. isGeldigeRol weigert
-	//    0 en NULL, maar ook een rolnummer dat niet in rollen.config.ts staat.
-	const gebruiker = await zoekGebruikerOpEmail(c.env, identiteit.email);
-	const rol = gebruiker?.mcp_rol ?? 0;
-	if (!gebruiker || !isGeldigeRol(rol)) {
-		console.warn(`Toegang geweigerd voor ${identiteit.email} (oid: ${identiteit.oid}): niet gevonden of rol ${rol}.`);
+	// 3. POORTWACHTER: bestaat deze gebruiker in de database en draagt die een
+	//    rol? Zo niet → toegang weigeren. Deze aanroep legt meteen de
+	//    Entra-oid vast als dat de eerste geslaagde login is.
+	// Dit is het ENIGE pad waar de Entra-oid aan een rij gebonden mag worden:
+	// hier meldt iemand zich daadwerkelijk aan bij Microsoft.
+	const context = await leesRolContext(c.env, identiteit.oid, identiteit.email, {
+		magBinden: true,
+	});
+	if (!context) {
+		console.warn(
+			`Toegang geweigerd voor ${identiteit.email} (oid: ${identiteit.oid}): geen rij of geen rol.`,
+		);
 		return foutPagina(
 			c.req.raw,
 			`Toegang geweigerd. Het e-mailadres <strong>${sanitizeHtml(identiteit.email)}</strong> is niet bekend ` +
@@ -196,7 +189,9 @@ app.get("/callback", async (c) => {
 		} satisfies Props,
 	});
 
-	console.log(`Login geslaagd voor ${identiteit.email} (oid: ${identiteit.oid}), rol ${rol} (${rolNaam(rol)}).`);
+	console.log(
+		`Login geslaagd voor ${identiteit.email} (oid: ${identiteit.oid}), rol "${context.rolNaam}".`,
+	);
 	return Response.redirect(redirectTo);
 });
 

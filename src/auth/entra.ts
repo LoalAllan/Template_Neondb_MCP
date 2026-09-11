@@ -129,10 +129,10 @@ export function decodeerIdToken(idToken: string, env: Env): EntraIdentiteit {
 	const claims = JSON.parse(decodeerBase64Url(delen[1])) as EntraClaims;
 
 	// ── Sanity-checks ──────────────────────────────────────────────────
-	if (claims.tid !== env.AZURE_TENANT_ID) {
+	if (typeof claims.tid !== "string" || !env.AZURE_TENANT_ID || claims.tid !== env.AZURE_TENANT_ID) {
 		throw new Error("Het id_token komt niet uit de verwachte Azure-tenant.");
 	}
-	if (claims.aud !== env.AZURE_CLIENT_ID) {
+	if (typeof claims.aud !== "string" || !env.AZURE_CLIENT_ID || claims.aud !== env.AZURE_CLIENT_ID) {
 		throw new Error("Het id_token is niet uitgegeven voor deze applicatie.");
 	}
 	if (typeof claims.exp !== "number" || claims.exp * 1000 < Date.now()) {
@@ -143,6 +143,22 @@ export function decodeerIdToken(idToken: string, env: Env): EntraIdentiteit {
 	// Voorkeur: de expliciete "email"-claim (optional claim in Azure).
 	// Fallback: preferred_username — in een single-tenant organisatie is
 	// dat vrijwel altijd het UPN, en dus een e-mailadres.
+	/*
+	 * ⚠ De oid MOET er zijn. Vullen met een sentinel ("onbekend") was een echt
+	 * gat: die literal wordt bij de eerste login aan één rij gebonden, en
+	 * omdat entra_oid uniek is matcht ELKE volgende login zonder oid-claim
+	 * daarna op diezelfde rij — met diens rol en diens rechten. Er gaat niets
+	 * stuk, er wordt niets gelogd, en het is directe impersonatie.
+	 *
+	 * Bij twijfel weigeren: geen oid, geen sessie.
+	 */
+	if (typeof claims.oid !== "string" || claims.oid.trim() === "") {
+		throw new Error(
+			"Het Microsoft-id_token bevat geen object-id (oid). Zonder die onveranderlijke sleutel " +
+				"kan je account niet veilig herkend worden.",
+		);
+	}
+
 	const ruwEmail = claims.email ?? claims.preferred_username;
 	if (!ruwEmail || !ruwEmail.includes("@")) {
 		throw new Error(
@@ -154,6 +170,6 @@ export function decodeerIdToken(idToken: string, env: Env): EntraIdentiteit {
 	return {
 		email: ruwEmail.toLowerCase().trim(),
 		naam: claims.name ?? ruwEmail,
-		oid: claims.oid ?? "onbekend",
+		oid: claims.oid,
 	};
 }

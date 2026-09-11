@@ -1,0 +1,13 @@
+# pnpm 10+ leest instellingen uit dit bestand, niet meer uit het "pnpm"-veld in package.json.
+# Build-scripts van dependencies moeten expliciet toegestaan worden.
+allowBuilds:
+  core-js-pure: false
+  esbuild: true
+  sharp: true
+  workerd: true
+
+# `agents` pint @modelcontextprotocol/sdk exact op 1.29.0. Twee kopieën van de
+# SDK in één bundel geven onverenigbare McpServer-types; deze override houdt
+# het op één versie.
+overrides:
+  "@modelcontextprotocol/sdk": 1.29.0

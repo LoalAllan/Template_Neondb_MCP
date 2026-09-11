@@ -8,33 +8,25 @@
  * deze props in het uitgegeven token en levert ze bij elke MCP-sessie weer
  * aan als `this.props` in de MyMCP-klasse (src/index.ts).
  *
- * BELANGRIJK ONTWERPBESLUIT: het rolniveau zit hier bewust NIET in.
- * De rol wordt bij elke nieuwe MCP-sessie vers opgezocht in de database
- * (zie MyMCP.init), zodat een rolwijziging in de UI van de applicatie
- * direct effect heeft zonder dat de gebruiker opnieuw hoeft in te loggen.
+ * BELANGRIJK ONTWERPBESLUIT: de rol en de rechten zitten hier bewust NIET in.
+ * Ze worden bij ÉLKE tool-aanroep vers uit de database gelezen (zie
+ * database/rechten.ts), zodat een ingetrokken recht onmiddellijk geldt — ook
+ * midden in een lopende sessie. Cache dit nergens.
  */
 export type Props = {
-	/** E-mailadres (lowercase) — dé sleutel waarmee de gebruiker in de database gematcht wordt. */
+	/** E-mailadres (lowercase) — het label, en de sleutel voor de EERSTE koppeling. */
 	email: string;
 	/** Weergavenaam uit het Microsoft-id_token. */
 	naam: string;
-	/** Onveranderlijk Azure object-ID van de gebruiker (gelogd voor traceerbaarheid). */
+	/**
+	 * Onveranderlijk Entra object-ID — DÉ matching-sleutel.
+	 *
+	 * Een e-mailadres is in Entra te wijzigen en opnieuw uit te geven: wie het
+	 * adres van een vertrokken beheerder toegewezen krijgt, zou diens rol erven.
+	 * Daarom matcht de server op de oid, en dient e-mail alleen om de oid bij de
+	 * eerste login eenmalig aan een rij te binden.
+	 */
 	oid: string;
 	/** Tijdstip (ms sinds epoch) waarop het token is uitgegeven. */
 	tokenIssuedAt: number;
 } & Record<string, unknown>; // vereist door de Props-generic van McpAgent
-
-/**
- * Eén rij uit de gebruikerstabel, zoals teruggegeven door
- * database/gebruikers.ts (kolomnamen genormaliseerd via SQL-aliassen).
- */
-export type GebruikerRij = {
-	email: string;
-	/**
-	 * Rolnummer uit de gebruikerstabel. Alleen nummers die als sleutel in
-	 * ROLLEN (rollen.config.ts) voorkomen geven toegang; 0, NULL en onbekende
-	 * nummers worden geweigerd. Het model is niet hiërarchisch: een hoger
-	 * nummer is niet "meer", maar een andere scope.
-	 */
-	mcp_rol: number | null;
-};

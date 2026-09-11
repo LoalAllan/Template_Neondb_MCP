@@ -57,22 +57,50 @@ export function createErrorResponse(tekst: string, details?: string): ToolResult
  */
 export function formatDatabaseError(fout: unknown): string {
 	const boodschap = fout instanceof Error ? fout.message : String(fout);
+	console.error("Databasefout (volledig):", boodschap);
 
-	// Verberg connection strings en credentials
+	// Verberg connection strings en credentials.
 	if (/postgres(ql)?:\/\//i.test(boodschap) || /password|wachtwoord/i.test(boodschap)) {
 		return "Er is een databasefout opgetreden (details staan in de serverlogs).";
 	}
-	// Postgres weigert de tabel: dat is geen storing maar het rechtenmodel dat
-	// zijn werk doet. Zie rollen.config.ts — elke rol heeft eigen GRANT's.
-	if (/permission denied/i.test(boodschap)) {
-		return (
-			"Je rol heeft geen toegang tot die tabel. " +
-			"Gebruik `lijst_tabellen` om te zien welke tabellen je wél mag benaderen."
-		);
+	// Time-outs apart benoemen: meestal een tijdelijk probleem.
+	if (/timeout|timed out|statement timeout|canceling statement/i.test(boodschap)) {
+		return "De query duurde te lang en is afgebroken. Maak hem eenvoudiger of filter scherper.";
 	}
-	// Time-outs apart benoemen: meestal een tijdelijk probleem
-	if (/timeout|timed out/i.test(boodschap)) {
-		return "De database reageerde niet op tijd. Probeer het zo meteen opnieuw.";
+
+	/*
+	 * Een foreign-key-fout noemt de tabel waarnáár verwezen wordt — en dat kan
+	 * een tabel zijn die de aanroeper nooit genoemd heeft en niet mag zien. Zo'n
+	 * melding is een gratis kijkje in het schema, dus die geven we niet door.
+	 *
+	 * Er blijft een restrisico: of de INSERT slaagt of faalt hangt af van wat er
+	 * in die gesloten tabel staat. Dat verschil is niet te verbergen zonder de
+	 * schrijffunctie zelf onbruikbaar te maken. Het lekt weinig (één bit per
+	 * poging), maar het lekt.
+	 */
+	if (/foreign key|violates foreign key constraint/i.test(boodschap)) {
+		return "Deze waarde verwijst naar iets dat niet bestaat of niet toegankelijk is.";
 	}
-	return `Databasefout: ${boodschap}`;
+
+	/*
+	 * Fouten die uitsluitend over de aangeleverde gegevens gaan, mogen wél door:
+	 * daar heeft het model iets aan, en ze noemen niets wat het niet al wist.
+	 */
+	if (/violates not-null constraint|null value in column/i.test(boodschap)) {
+		return `Een verplichte kolom bleef leeg. ${boodschap}`;
+	}
+	if (/duplicate key value|unique constraint/i.test(boodschap)) {
+		return "Er bestaat al een rij met deze waarde.";
+	}
+	if (/invalid input syntax|out of range|violates check constraint/i.test(boodschap)) {
+		return `De aangeleverde waarde klopt niet. ${boodschap}`;
+	}
+	if (/permission denied|must be owner|read-only transaction/i.test(boodschap)) {
+		// De database heeft geweigerd. Wélke tabel dat was, houden we voor ons.
+		return "Deze bewerking is niet toegestaan.";
+	}
+
+	// Alles wat we niet herkennen, geven we NIET door: een onbekende melding
+	// kan tabelnamen bevatten die de aanroeper niet noemde.
+	return "Er is een databasefout opgetreden (details staan in de serverlogs).";
 }

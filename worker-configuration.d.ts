@@ -25,27 +25,24 @@ declare global {
 		/** Sleutel (64 hex-tekens) voor het ondertekenen van goedkeurings-cookies. */
 		COOKIE_ENCRYPTION_KEY: string;
 
-		// ── Database-verbindingen ──────────────────────────────────────────
-		/**
-		 * AUTH-verbinding: wordt UITSLUITEND gebruikt om op te zoeken welke rol
-		 * een ingelogde gebruiker heeft (src/database/gebruikers.ts). Dit is de
-		 * enige verbinding die de gebruikerstabel mag lezen; tools raken hem
-		 * nooit aan.
-		 */
-		DATABASE_URL: string;
+		// ── De drie MCP-databaseverbindingen ───────────────────────────────
+		//
+		// ⚠ Ontbreekt er één, dan WEIGERT de server dienst. Er is bewust geen
+		// terugval op een ruimere verbinding: dat is de klassieke fail-open,
+		// waarbij de beveiliging verdwijnt zonder dat er iets stukgaat.
+		//
+		// De volledige gebruiker (de eigenaar van de database) hoort bij de
+		// migraties en de applicatie van de klant en wordt hier BEWUST niet
+		// gedeclareerd — geen enkele MCP-tool mag hem gebruiken.
+		//
+		// Zie sql/02-mcp-neon-rollen.sql voor de GRANT's die hierbij horen.
 
-		/**
-		 * ROL-verbindingen: per MCP-rol de connection string van de Postgres-rol
-		 * met GRANT's op precies de tabellen van die rol. De namen moeten
-		 * overeenkomen met `secretNaam` in src/rollen.config.ts.
-		 *
-		 * Optioneel getypeerd omdat een klant met 2 rollen er ook maar 2 zet.
-		 * Ontbreekt een secret, dan geeft getRolDb() een duidelijke melding.
-		 */
-		DATABASE_URL_ROL_1?: string;
-		DATABASE_URL_ROL_2?: string;
-		DATABASE_URL_ROL_3?: string;
-		DATABASE_URL_ROL_4?: string;
+		/** Postgres-rol `mcp_lezer`: uitsluitend SELECT, draait read-only. */
+		DATABASE_URL_LEZER: string;
+		/** Postgres-rol `mcp_schrijver`: uitsluitend INSERT en UPDATE — nooit DELETE, nooit DDL. */
+		DATABASE_URL_SCHRIJVER: string;
+		/** Postgres-rol `mcp_service`: leest de rechten, bindt de Entra-oid en werkt de schrijfteller bij. Meer niet. */
+		DATABASE_URL_SERVICE: string;
 	}
 }
 

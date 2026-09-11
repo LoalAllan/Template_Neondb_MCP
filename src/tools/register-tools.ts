@@ -1,25 +1,28 @@
 /**
  * Centrale tool-registry.
  *
- * MyMCP.init() (src/index.ts) roept deze functie één keer per MCP-sessie aan,
- * mét het verse rolnummer van de gebruiker uit de database.
+ * Dit is de ENIGE plek waar tool-modules worden aangesloten. MyMCP.init()
+ * (src/index.ts) roept deze functie één keer per MCP-sessie aan, mét de verse
+ * rolcontext van de gebruiker.
  *
- * ⚠️ HIER KOMEN GEEN TOOLS BIJ.
+ * ⚠ Komt er ooit een tool bij die de database raakt, dan MOET die door de
+ * gedeelde poort (database/poort.ts) — nooit rechtstreeks naar een
+ * verbinding. Zo'n toevoeging is een wijziging aan de veiligheidslaag en
+ * vraagt de zware controle, geen gewone review.
  *
- * Deze server heeft bewust maar drie tools — lijst_tabellen, lees_query en
- * voer_sql_uit — en die dekken samen alles af. Wil je een rol méér of minder
- * laten zien, dan pas je de tabellen van die rol aan (rollen.config.ts + de
- * GRANT's in Neon), niet de toolset.
- *
- * De harde grenzen en de verplichte procedure staan in
- * .claude/rules/mcp-rechten.md. Extra tools registreren mag uitsluitend met
- * expliciete toestemming van de eigenaar van het project.
+ * De toolset zelf is bewust drie tools en groeit niet; zie database-tools.ts.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RolContext } from "../database/rechten";
 import type { Props } from "../types";
-import { registreerSqlTools } from "./sql-tools";
+import { registreerDatabaseTools } from "./database-tools";
 
-export function registreerAlleTools(server: McpServer, env: Env, props: Props, rol: number): void {
-	registreerSqlTools(server, env, props, rol);
+export function registreerAlleTools(
+	server: McpServer,
+	env: Env,
+	props: Props,
+	context: RolContext,
+): void {
+	registreerDatabaseTools(server, env, props, context);
 }
